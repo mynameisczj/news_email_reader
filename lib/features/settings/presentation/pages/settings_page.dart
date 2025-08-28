@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../../../../core/models/email_account.dart';
-import '../../../../core/models/whitelist_rule.dart';
-import '../../../../core/services/ai_service.dart';
 import '../widgets/account_management_section.dart';
 import '../widgets/whitelist_management_section.dart';
 import '../widgets/ai_settings_section.dart';

@@ -157,8 +157,8 @@ class AnimationUtils {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        splashColor: rippleColor?.withOpacity(0.3),
-        highlightColor: rippleColor?.withOpacity(0.1),
+        splashColor: rippleColor?.withValues(alpha: 0.3),
+        highlightColor: rippleColor?.withValues(alpha: 0.1),
         borderRadius: borderRadius,
         child: child,
       ),

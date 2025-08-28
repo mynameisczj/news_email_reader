@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../utils/animation_utils.dart';
 
 /// 可滑动的邮件卡片组件
 class SwipeableEmailCard extends StatefulWidget {
@@ -440,7 +439,7 @@ class _FloatingActionButtonGroupState extends State<FloatingActionButtonGroup>
                   opacity: _expandAnimation.value,
                   child: FloatingActionButton(
                     mini: true,
-                    heroTag: 'fab_${index}',
+                    heroTag: 'fab_$index',
                     onPressed: button.onPressed,
                     backgroundColor: button.backgroundColor,
                     child: Icon(button.icon),
@@ -449,7 +448,7 @@ class _FloatingActionButtonGroupState extends State<FloatingActionButtonGroup>
               );
             },
           );
-        }).toList(),
+        }),
         FloatingActionButton(
           onPressed: widget.onMainPressed ?? _toggleExpansion,
           backgroundColor: widget.backgroundColor,

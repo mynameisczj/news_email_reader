@@ -17,6 +17,7 @@ dependencies:
   
   # Local Storage
   sqflite: ^2.3.0
+  sqflite_common_ffi: ^2.3.0
   hive: ^2.2.3
   hive_flutter: ^1.1.0
   flutter_secure_storage: ^9.0.0
@@ -44,6 +45,7 @@ dependencies:
   url_launcher: ^6.2.2
   share_plus: ^7.2.1
   path_provider: ^2.1.1
+  path: ^1.8.3
   
   # Encryption
   crypto: ^3.0.3
@@ -62,11 +64,11 @@ flutter:
     - assets/images/
     - assets/icons/
   
-  fonts:
-    - family: Roboto
-      fonts:
-        - asset: fonts/Roboto-Regular.ttf
-        - asset: fonts/Roboto-Medium.ttf
-          weight: 500
-        - asset: fonts/Roboto-Bold.ttf
-          weight: 700
+  # fonts:
+  #   - family: Roboto
+  #     fonts:
+  #       - asset: fonts/Roboto-Regular.ttf
+  #       - asset: fonts/Roboto-Medium.ttf
+  #         weight: 500
+  #       - asset: fonts/Roboto-Bold.ttf
+  #         weight: 700

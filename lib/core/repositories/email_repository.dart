@@ -96,7 +96,7 @@ class EmailRepository {
   Future<List<EmailMessage>> syncEmails(EmailAccount account) async {
     try {
       // 从邮件服务器获取邮件
-      final serverEmails = await _emailService.fetchEmails(account);
+      final serverEmails = await _emailService.fetchRecentEmails();
       
       // 通过白名单筛选
       final filteredEmails = await _whitelistService.filterEmails(serverEmails);

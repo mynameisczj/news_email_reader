@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/services/ai_service.dart';
-import '../../../../core/constants/app_constants.dart';
 
 class AISettingsSection extends ConsumerStatefulWidget {
   const AISettingsSection({super.key});
@@ -80,7 +79,7 @@ class _AISettingsSectionState extends ConsumerState<AISettingsSection> {
     final isSelected = _selectedProvider == value;
     
     return Card(
-      color: isSelected ? AppTheme.primaryColor.withOpacity(0.1) : null,
+      color: isSelected ? AppTheme.primaryColor.withValues(alpha: 0.1) : null,
       child: ListTile(
         leading: Icon(
           icon,

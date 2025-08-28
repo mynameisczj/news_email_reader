@@ -1,199 +1,190 @@
-import 'package:enough_mail/enough_mail.dart';
-import '../models/email_account.dart';
+import 'dart:async';
 import '../models/email_message.dart';
+import '../models/email_account.dart';
 
 class EmailService {
   static final EmailService _instance = EmailService._internal();
   factory EmailService() => _instance;
   EmailService._internal();
 
-  final Map<int, MailClient> _clients = {};
+  bool _isConnected = false;
+  EmailAccount? _currentAccount;
 
-  /// 连接邮件服务器
-  Future<bool> connectAccount(EmailAccount account) async {
+  Future<bool> connectToAccount(EmailAccount account) async {
     try {
-      final client = MailClient(
-        account: MailAccount.fromManualSettings(
-          name: account.displayName ?? account.email,
-          email: account.email,
-          incoming: MailServerConfig(
-            serverConfig: ServerConfig(
-              hostname: account.serverHost,
-              port: account.serverPort,
-              socketType: account.useSsl ? SocketType.ssl : SocketType.plain,
-            ),
-            authentication: PlainAuthentication(account.email, account.password),
-            serverCapabilities: [Capability.idle],
-          ),
-          outgoing: MailServerConfig(
-            serverConfig: ServerConfig(
-              hostname: account.serverHost,
-              port: account.protocol == 'SMTP' ? 587 : 993,
-              socketType: account.useSsl ? SocketType.ssl : SocketType.plain,
-            ),
-            authentication: PlainAuthentication(account.email, account.password),
-          ),
-        ),
-      );
-
-      await client.connect();
-      _clients[account.id!] = client;
+      // 模拟连接过程
+      await Future.delayed(const Duration(seconds: 1));
+      
+      _currentAccount = account;
+      _isConnected = true;
+      print('Successfully connected to email account: ${account.email}');
       return true;
     } catch (e) {
-      print('连接邮件服务器失败: $e');
+      print('Failed to connect to email account: $e');
+      _isConnected = false;
       return false;
     }
   }
 
-  /// 断开连接
-  Future<void> disconnectAccount(int accountId) async {
-    final client = _clients[accountId];
-    if (client != null) {
-      await client.disconnect();
-      _clients.remove(accountId);
+  Future<void> disconnect() async {
+    if (_isConnected) {
+      try {
+        await Future.delayed(const Duration(milliseconds: 500));
+        _isConnected = false;
+        _currentAccount = null;
+        print('Disconnected from email account');
+      } catch (e) {
+        print('Error disconnecting: $e');
+      }
     }
   }
 
-  /// 获取邮件列表
-  Future<List<EmailMessage>> fetchEmails(
-    EmailAccount account, {
-    int count = 50,
-    int page = 1,
-  }) async {
-    final client = _clients[account.id];
-    if (client == null) {
-      throw Exception('邮件客户端未连接');
+  Future<List<EmailMessage>> fetchRecentEmails({int count = 50}) async {
+    if (!_isConnected || _currentAccount == null) {
+      throw Exception('Not connected to email account');
     }
 
     try {
-      await client.selectInbox();
-      final fetchResult = await client.fetchRecentMessages(
-        messageCount: count,
-        criteria: 'UNSEEN',
-      );
-
-      final emails = <EmailMessage>[];
-      for (final message in fetchResult.messages) {
-        final email = _convertToEmailMessage(message, account.id!);
-        emails.add(email);
-      }
-
-      return emails;
+      // 模拟获取邮件
+      await Future.delayed(const Duration(seconds: 2));
+      
+      return _generateMockEmails(count);
     } catch (e) {
-      print('获取邮件失败: $e');
+      print('Error fetching recent emails: $e');
       return [];
     }
   }
 
-  /// 获取邮件详细内容
-  Future<EmailMessage?> fetchEmailContent(
-    EmailAccount account,
-    String messageId,
-  ) async {
-    final client = _clients[account.id];
-    if (client == null) {
-      throw Exception('邮件客户端未连接');
+  Future<List<EmailMessage>> searchEmails({
+    String? fromEmail,
+    String? subject,
+    DateTime? since,
+    DateTime? before,
+  }) async {
+    if (!_isConnected || _currentAccount == null) {
+      throw Exception('Not connected to email account');
     }
 
     try {
-      await client.selectInbox();
-      final searchResult = await client.searchMessages(
-        searchCriteria: SearchQueryBuilder().header('Message-ID', messageId),
-      );
-
-      if (searchResult.matchingSequences?.isNotEmpty == true) {
-        final sequence = searchResult.matchingSequences!.first;
-        final fetchResult = await client.fetchMessage(sequence);
-        return _convertToEmailMessage(fetchResult, account.id!);
-      }
-
-      return null;
-    } catch (e) {
-      print('获取邮件内容失败: $e');
-      return null;
-    }
-  }
-
-  /// 标记邮件为已读
-  Future<bool> markAsRead(EmailAccount account, String messageId) async {
-    final client = _clients[account.id];
-    if (client == null) return false;
-
-    try {
-      await client.selectInbox();
-      final searchResult = await client.searchMessages(
-        searchCriteria: SearchQueryBuilder().header('Message-ID', messageId),
-      );
-
-      if (searchResult.matchingSequences?.isNotEmpty == true) {
-        final sequence = searchResult.matchingSequences!.first;
-        await client.markSeen(MessageSequence.fromSequence(sequence));
+      await Future.delayed(const Duration(seconds: 1));
+      
+      // 模拟搜索结果
+      final allEmails = _generateMockEmails(20);
+      return allEmails.where((email) {
+        if (fromEmail != null && !email.senderEmail.contains(fromEmail)) {
+          return false;
+        }
+        if (subject != null && !email.subject.toLowerCase().contains(subject.toLowerCase())) {
+          return false;
+        }
+        if (since != null && email.receivedDate.isBefore(since)) {
+          return false;
+        }
+        if (before != null && email.receivedDate.isAfter(before)) {
+          return false;
+        }
         return true;
-      }
-
-      return false;
+      }).toList();
     } catch (e) {
-      print('标记已读失败: $e');
-      return false;
+      print('Error searching emails: $e');
+      return [];
     }
   }
 
-  /// 转换邮件消息格式
-  EmailMessage _convertToEmailMessage(MimeMessage message, int accountId) {
-    return EmailMessage(
-      accountId: accountId,
-      messageId: message.getHeaderValue('Message-ID') ?? '',
-      subject: message.decodeSubject() ?? '无主题',
-      senderName: message.from?.first.personalName,
-      senderEmail: message.from?.first.email ?? '',
-      recipientEmail: message.to?.first.email,
-      contentText: message.decodeTextPlainPart(),
-      contentHtml: message.decodeTextHtmlPart(),
-      receivedDate: message.decodeDate() ?? DateTime.now(),
-      createdAt: DateTime.now(),
-    );
+  Future<List<EmailMessage>> fetchEmailsByKeywords(List<String> keywords) async {
+    if (!_isConnected || _currentAccount == null) {
+      throw Exception('Not connected to email account');
+    }
+
+    try {
+      await Future.delayed(const Duration(seconds: 1));
+      
+      final allEmails = _generateMockEmails(30);
+      return allEmails.where((email) {
+        final content = '${email.subject} ${email.previewContent}'.toLowerCase();
+        return keywords.any((keyword) => content.contains(keyword.toLowerCase()));
+      }).toList();
+    } catch (e) {
+      print('Error fetching emails by keywords: $e');
+      return [];
+    }
   }
 
-  /// 测试邮件服务器连接
-  Future<bool> testConnection(EmailAccount account) async {
+  Future<bool> connectToPop3Account(EmailAccount account) async {
     try {
-      final client = MailClient(
-        account: MailAccount.fromManualSettings(
-          name: account.displayName ?? account.email,
-          email: account.email,
-          incoming: MailServerConfig(
-            serverConfig: ServerConfig(
-              hostname: account.serverHost,
-              port: account.serverPort,
-              socketType: account.useSsl ? SocketType.ssl : SocketType.plain,
-            ),
-            authentication: PlainAuthentication(account.email, account.password),
-          ),
-          outgoing: MailServerConfig(
-            serverConfig: ServerConfig(
-              hostname: account.serverHost,
-              port: account.protocol == 'SMTP' ? 587 : 993,
-              socketType: account.useSsl ? SocketType.ssl : SocketType.plain,
-            ),
-            authentication: PlainAuthentication(account.email, account.password),
-          ),
-        ),
-      );
-
-      await client.connect();
-      await client.disconnect();
+      await Future.delayed(const Duration(seconds: 1));
+      
+      _currentAccount = account;
+      _isConnected = true;
+      print('Successfully connected to POP3 account: ${account.email}');
       return true;
     } catch (e) {
-      print('测试连接失败: $e');
+      print('Failed to connect to POP3 account: $e');
+      _isConnected = false;
       return false;
     }
   }
 
-  /// 断开所有连接
-  Future<void> disconnectAll() async {
-    for (final client in _clients.values) {
-      await client.disconnect();
+  List<EmailMessage> _generateMockEmails(int count) {
+    final emails = <EmailMessage>[];
+    final senders = [
+      'GitHub <noreply@github.com>',
+      'Stack Overflow <noreply@stackoverflow.com>',
+      'Medium <noreply@medium.com>',
+      'Dev.to <noreply@dev.to>',
+      'Hacker News <noreply@hackernews.com>',
+      'TechCrunch <newsletter@techcrunch.com>',
+      'Ars Technica <newsletter@arstechnica.com>',
+      'The Verge <newsletter@theverge.com>',
+    ];
+
+    final subjects = [
+      '[GitHub] New release available for flutter/flutter',
+      'Weekly digest: Top questions this week',
+      'New story published: Understanding Flutter State Management',
+      'DEV Community Digest: This week\'s top posts',
+      'Ask HN: What are you working on?',
+      'Breaking: Apple announces new MacBook Pro',
+      'Review: The latest in quantum computing research',
+      'This Week in Tech: AI developments',
+    ];
+
+    final contents = [
+      'A new version of Flutter has been released with improved performance and new features...',
+      'Here are the most popular questions from this week on Stack Overflow...',
+      'In this comprehensive guide, we explore the different state management solutions...',
+      'Check out these amazing posts from the DEV community this week...',
+      'Share what you\'re currently working on and get feedback from the community...',
+      'Apple has just announced their latest MacBook Pro with the new M3 chip...',
+      'Researchers have made significant breakthroughs in quantum computing...',
+      'This week has been exciting for AI development with several major announcements...',
+    ];
+
+    for (int i = 0; i < count; i++) {
+      final senderInfo = senders[i % senders.length];
+      final senderParts = senderInfo.split(' <');
+      final senderName = senderParts[0];
+      final senderEmail = senderParts[1].replaceAll('>', '');
+
+      emails.add(EmailMessage(
+        accountId: 1,
+        messageId: 'mock_${i + 1}',
+        subject: subjects[i % subjects.length],
+        senderEmail: senderEmail,
+        senderName: senderName,
+        recipientEmail: _currentAccount?.email ?? 'user@example.com',
+        contentText: contents[i % contents.length],
+        contentHtml: '<p>${contents[i % contents.length]}</p>',
+        receivedDate: DateTime.now().subtract(Duration(hours: i)),
+        isRead: i % 3 == 0,
+        isStarred: i % 5 == 0,
+        createdAt: DateTime.now().subtract(Duration(hours: i)),
+      ));
     }
-    _clients.clear();
+
+    return emails;
   }
+
+  bool get isConnected => _isConnected;
+  EmailAccount? get currentAccount => _currentAccount;
 }

@@ -25,7 +25,6 @@ class _EmailReaderPageState extends ConsumerState<EmailReaderPage> {
   bool _isGeneratingSummary = false;
   String? _aiSummary;
   double _fontSize = 16.0;
-  bool _isDarkMode = true;
 
   @override
   void initState() {
@@ -118,7 +117,7 @@ class _EmailReaderPageState extends ConsumerState<EmailReaderPage> {
               end: Alignment.bottomCenter,
               colors: [
                 AppTheme.backgroundColor,
-                AppTheme.backgroundColor.withOpacity(0.8),
+                AppTheme.backgroundColor.withValues(alpha: 0.8),
               ],
             ),
           ),
@@ -219,7 +218,7 @@ class _EmailReaderPageState extends ConsumerState<EmailReaderPage> {
 
   Widget _buildAISummary() {
     return Card(
-      color: AppTheme.primaryColor.withOpacity(0.1),
+      color: AppTheme.primaryColor.withValues(alpha: 0.1),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -320,7 +319,7 @@ class _EmailReaderPageState extends ConsumerState<EmailReaderPage> {
         color: AppTheme.surfaceColor,
         border: Border(
           top: BorderSide(
-            color: AppTheme.textSecondaryColor.withOpacity(0.2),
+            color: AppTheme.textSecondaryColor.withValues(alpha: 0.2),
             width: 1,
           ),
         ),

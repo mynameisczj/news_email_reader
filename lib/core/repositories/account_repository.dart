@@ -1,5 +1,5 @@
-import '../models/email_account.dart';
 import '../database/database_helper.dart';
+import '../models/email_account.dart';
 import '../services/email_service.dart';
 
 class AccountRepository {
@@ -7,57 +7,44 @@ class AccountRepository {
   factory AccountRepository() => _instance;
   AccountRepository._internal();
 
-  final DatabaseHelper _db = DatabaseHelper.instance;
+  final DatabaseHelper _databaseHelper = DatabaseHelper();
   final EmailService _emailService = EmailService();
-
-  /// 添加邮件账户
-  Future<int> addAccount(EmailAccount account) async {
-    final database = await _db.database;
-    return await database.insert('email_accounts', account.toMap());
-  }
 
   /// 获取所有邮件账户
   Future<List<EmailAccount>> getAllAccounts() async {
-    final database = await _db.database;
-    final maps = await database.query(
-      'email_accounts',
-      orderBy: 'created_at DESC',
-    );
-    return maps.map((map) => EmailAccount.fromMap(map)).toList();
-  }
-
-  /// 获取活跃的邮件账户
-  Future<List<EmailAccount>> getActiveAccounts() async {
-    final database = await _db.database;
-    final maps = await database.query(
-      'email_accounts',
-      where: 'is_active = ?',
-      whereArgs: [1],
-      orderBy: 'created_at DESC',
-    );
-    return maps.map((map) => EmailAccount.fromMap(map)).toList();
+    final db = await _databaseHelper.database;
+    final List<Map<String, dynamic>> maps = await db.query('email_accounts');
+    
+    return List.generate(maps.length, (i) {
+      return EmailAccount.fromMap(maps[i]);
+    });
   }
 
   /// 根据ID获取账户
   Future<EmailAccount?> getAccountById(int id) async {
-    final database = await _db.database;
-    final maps = await database.query(
+    final db = await _databaseHelper.database;
+    final List<Map<String, dynamic>> maps = await db.query(
       'email_accounts',
       where: 'id = ?',
       whereArgs: [id],
     );
-    
+
     if (maps.isNotEmpty) {
       return EmailAccount.fromMap(maps.first);
     }
-    
     return null;
   }
 
-  /// 更新账户信息
+  /// 添加新账户
+  Future<int> addAccount(EmailAccount account) async {
+    final db = await _databaseHelper.database;
+    return await db.insert('email_accounts', account.toMap());
+  }
+
+  /// 更新账户
   Future<int> updateAccount(EmailAccount account) async {
-    final database = await _db.database;
-    return await database.update(
+    final db = await _databaseHelper.database;
+    return await db.update(
       'email_accounts',
       account.toMap(),
       where: 'id = ?',
@@ -67,83 +54,145 @@ class AccountRepository {
 
   /// 删除账户
   Future<int> deleteAccount(int id) async {
-    final database = await _db.database;
+    final db = await _databaseHelper.database;
     
-    // 先断开连接
-    await _emailService.disconnectAccount(id);
-    
-    // 删除账户相关的邮件
-    await database.delete(
+    // 先删除相关的邮件
+    await db.delete(
       'emails',
       where: 'account_id = ?',
       whereArgs: [id],
     );
     
-    // 删除账户
-    return await database.delete(
+    // 再删除账户
+    return await db.delete(
       'email_accounts',
       where: 'id = ?',
       whereArgs: [id],
     );
+  }
+
+  /// 激活账户
+  Future<bool> activateAccount(int id) async {
+    final account = await getAccountById(id);
+    if (account == null) return false;
+
+    try {
+      // 连接到邮件服务器
+      final success = await _emailService.connectToAccount(account);
+      if (success) {
+        // 更新账户状态为激活
+        final updatedAccount = account.copyWith(isActive: true);
+        await updateAccount(updatedAccount);
+        return true;
+      }
+      return false;
+    } catch (e) {
+      print('Error activating account: $e');
+      return false;
+    }
+  }
+
+  /// 停用账户
+  Future<void> deactivateAccount(int id) async {
+    final account = await getAccountById(id);
+    if (account == null) return;
+
+    // 断开连接
+    await _emailService.disconnect();
+    
+    // 更新账户状态为停用
+    final updatedAccount = account.copyWith(isActive: false);
+    await updateAccount(updatedAccount);
   }
 
   /// 测试账户连接
   Future<bool> testAccountConnection(EmailAccount account) async {
-    return await _emailService.testConnection(account);
+    return await _emailService.connectToAccount(account);
   }
 
-  /// 激活/停用账户
-  Future<int> toggleAccountStatus(int id, bool isActive) async {
-    final database = await _db.database;
-    
-    if (!isActive) {
-      // 如果停用账户，断开连接
-      await _emailService.disconnectAccount(id);
-    }
-    
-    return await database.update(
+  /// 获取激活的账户
+  Future<List<EmailAccount>> getActiveAccounts() async {
+    final db = await _databaseHelper.database;
+    final List<Map<String, dynamic>> maps = await db.query(
       'email_accounts',
-      {
-        'is_active': isActive ? 1 : 0,
-        'updated_at': DateTime.now().toIso8601String(),
-      },
-      where: 'id = ?',
-      whereArgs: [id],
+      where: 'is_active = ?',
+      whereArgs: [1],
     );
+    
+    return List.generate(maps.length, (i) {
+      return EmailAccount.fromMap(maps[i]);
+    });
   }
 
-  /// 连接所有活跃账户
+  /// 停用账户时断开连接
+  Future<void> deactivateAccountWithDisconnect(int id) async {
+    // 如果停用账户，断开连接
+    await _emailService.disconnect();
+    
+    final account = await getAccountById(id);
+    if (account != null) {
+      final updatedAccount = account.copyWith(isActive: false);
+      await updateAccount(updatedAccount);
+    }
+  }
+
+  /// 连接所有激活的账户
   Future<Map<int, bool>> connectAllActiveAccounts() async {
     final accounts = await getActiveAccounts();
-    final results = <int, bool>{};
+    final Map<int, bool> results = {};
     
     for (final account in accounts) {
-      final success = await _emailService.connectAccount(account);
+      final success = await _emailService.connectToAccount(account);
       results[account.id!] = success;
+      if (!success) {
+        print('Failed to connect account: ${account.email}');
+      }
     }
     
     return results;
   }
 
-  /// 根据邮箱地址查找账户
-  Future<EmailAccount?> getAccountByEmail(String email) async {
-    final database = await _db.database;
-    final maps = await database.query(
-      'email_accounts',
-      where: 'email = ?',
-      whereArgs: [email],
-    );
-    
-    if (maps.isNotEmpty) {
-      return EmailAccount.fromMap(maps.first);
+  /// 验证账户配置
+  Future<bool> validateAccountConfig(EmailAccount account) async {
+    // 基本验证
+    if (account.email.isEmpty || 
+        account.serverHost.isEmpty || 
+        account.password.isEmpty) {
+      return false;
     }
-    
-    return null;
+
+    // 邮箱格式验证
+    final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+    if (!emailRegex.hasMatch(account.email)) {
+      return false;
+    }
+
+    return true;
   }
 
-  /// 检查邮箱是否已存在
-  Future<bool> emailExists(String email) async {
-    final account = await getAccountByEmail(email);
-    return account != null;
+  /// 获取账户统计信息
+  Future<Map<String, int>> getAccountStats(int accountId) async {
+    final db = await _databaseHelper.database;
+    
+    final totalResult = await db.rawQuery(
+      'SELECT COUNT(*) as count FROM emails WHERE account_id = ?',
+      [accountId],
+    );
+    
+    final unreadResult = await db.rawQuery(
+      'SELECT COUNT(*) as count FROM emails WHERE account_id = ? AND is_read = 0',
+      [accountId],
+    );
+    
+    final starredResult = await db.rawQuery(
+      'SELECT COUNT(*) as count FROM emails WHERE account_id = ? AND is_starred = 1',
+      [accountId],
+    );
+
+    return {
+      'total': totalResult.first['count'] as int,
+      'unread': unreadResult.first['count'] as int,
+      'starred': starredResult.first['count'] as int,
+    };
   }
 }

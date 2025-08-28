@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/models/email_message.dart';
 import '../../../../core/utils/animation_utils.dart';
+import '../../../../core/services/mock_email_service.dart';
 import '../../../reader/presentation/pages/email_reader_page.dart';
 import '../../../settings/presentation/pages/settings_page.dart';
 
@@ -15,6 +16,10 @@ class HomePage extends ConsumerStatefulWidget {
 
 class _HomePageState extends ConsumerState<HomePage> {
   int _selectedTabIndex = 0;
+  bool _isLoading = false;
+  bool _isRefreshing = false;
+  List<EmailMessage> _emails = [];
+  final MockEmailService _emailService = MockEmailService();
   
   final List<String> _filterTabs = [
     '全部',
@@ -23,6 +28,41 @@ class _HomePageState extends ConsumerState<HomePage> {
     '已总结',
     '已收藏',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadEmails();
+  }
+
+  Future<void> _loadEmails() async {
+    if (_isLoading) return;
+    
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final filter = _selectedTabIndex == 0 ? null : _filterTabs[_selectedTabIndex];
+      final emails = await _emailService.getEmails(filter: filter);
+      
+      if (mounted) {
+        setState(() {
+          _emails = emails;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('加载邮件失败: $e')),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -104,9 +144,12 @@ class _HomePageState extends ConsumerState<HomePage> {
           final isSelected = index == _selectedTabIndex;
           return GestureDetector(
             onTap: () {
-              setState(() {
-                _selectedTabIndex = index;
-              });
+              if (_selectedTabIndex != index) {
+                setState(() {
+                  _selectedTabIndex = index;
+                });
+                _loadEmails();
+              }
             },
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
@@ -117,7 +160,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: isSelected ? [
                   BoxShadow(
-                    color: AppTheme.primaryColor.withOpacity(0.3),
+                    color: AppTheme.primaryColor.withValues(alpha: 0.3),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -139,34 +182,62 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
   
   Widget _buildEmailList() {
-    // 模拟邮件数据
-    final mockEmails = List.generate(10, (index) => {
-      'id': index,
-      'subject': '科技日报 - 人工智能最新进展 ${index + 1}',
-      'sender': 'tech@example.com',
-      'senderName': '科技日报',
-      'preview': '本期内容包括：OpenAI发布最新模型、谷歌AI突破性进展、苹果智能功能更新...',
-      'time': '${2 + index}小时前',
-      'isRead': index % 3 == 0,
-      'isStarred': index % 5 == 0,
-      'hasSummary': index % 4 == 0,
-      'category': '科技',
-    });
+    if (_isLoading && _emails.isEmpty) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+
+    if (_emails.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.inbox_outlined,
+              size: 64,
+              color: AppTheme.textSecondaryColor,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '暂无邮件',
+              style: TextStyle(
+                fontSize: 18,
+                color: AppTheme.textSecondaryColor,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '下拉刷新或检查网络连接',
+              style: TextStyle(
+                fontSize: 14,
+                color: AppTheme.textSecondaryColor,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: mockEmails.length,
-      itemBuilder: (context, index) {
-        final email = mockEmails[index];
-        return _buildEmailCard(email);
+    return RefreshIndicator(
+      onRefresh: () async {
+        await _refreshEmails();
       },
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: _emails.length,
+        itemBuilder: (context, index) {
+          final email = _emails[index];
+          return _buildEmailCard(email);
+        },
+      ),
     );
   }
   
-  Widget _buildEmailCard(Map<String, dynamic> email) {
+  Widget _buildEmailCard(EmailMessage email) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      child: GestureDetector(
+        child: GestureDetector(
         onLongPress: () => _showEmailOptions(email),
         child: InkWell(
           onTap: () => _openEmailReader(email),
@@ -176,7 +247,7 @@ class _HomePageState extends ConsumerState<HomePage> {
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(8),
-              color: email['isRead'] ? null : Theme.of(context).primaryColor.withOpacity(0.05),
+              color: email.isRead ? null : Theme.of(context).primaryColor.withValues(alpha: 0.05),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -187,7 +258,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                     radius: 20,
                     backgroundColor: AppTheme.primaryColor,
                     child: Text(
-                      email['senderName'][0],
+                      (email.senderName?.isNotEmpty == true) ? email.senderName![0].toUpperCase() : '?',
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
@@ -199,32 +270,32 @@ class _HomePageState extends ConsumerState<HomePage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          email['senderName'],
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w500,
-                            fontSize: 14,
-                          ),
-                        ),
-                        Text(
-                          email['sender'],
-                          style: TextStyle(
-                            color: AppTheme.textSecondaryColor,
-                            fontSize: 12,
-                          ),
-                        ),
+                  Text(
+                    email.senderName ?? '未知发件人',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 14,
+                    ),
+                  ),
+                  Text(
+                    email.senderEmail ?? '',
+                    style: TextStyle(
+                      color: AppTheme.textSecondaryColor,
+                      fontSize: 12,
+                    ),
+                  ),
                       ],
                     ),
                   ),
                   Text(
-                    email['time'],
+                    _formatTime(email.receivedDate),
                     style: TextStyle(
                       color: AppTheme.textSecondaryColor,
                       fontSize: 12,
                     ),
                   ),
                   const SizedBox(width: 8),
-                  if (email['isStarred'])
+                  if (email.isStarred)
                     const Icon(
                       Icons.star,
                       color: AppTheme.secondaryColor,
@@ -234,9 +305,9 @@ class _HomePageState extends ConsumerState<HomePage> {
               ),
               const SizedBox(height: 12),
               Text(
-                email['subject'],
+                email.subject ?? '无主题',
                 style: TextStyle(
-                  fontWeight: email['isRead'] ? FontWeight.normal : FontWeight.w500,
+                  fontWeight: email.isRead ? FontWeight.normal : FontWeight.w500,
                   fontSize: 16,
                 ),
                 maxLines: 1,
@@ -244,7 +315,7 @@ class _HomePageState extends ConsumerState<HomePage> {
               ),
               const SizedBox(height: 4),
               Text(
-                email['preview'],
+                email.contentText ?? '无内容',
                 style: TextStyle(
                   color: AppTheme.textSecondaryColor,
                   fontSize: 14,
@@ -258,28 +329,28 @@ class _HomePageState extends ConsumerState<HomePage> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
-                      color: AppTheme.primaryColor.withOpacity(0.2),
+                      color: AppTheme.primaryColor.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(4),
                     ),
-                    child: Text(
-                      email['category'],
-                      style: const TextStyle(
+                    child: const Text(
+                      '新闻',
+                      style: TextStyle(
                         color: AppTheme.primaryColor,
                         fontSize: 10,
                       ),
                     ),
                   ),
                   const Spacer(),
-                  if (email['hasSummary'])
+                  if (email.aiSummary != null)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
-                        color: AppTheme.secondaryColor.withOpacity(0.2),
+                        color: AppTheme.secondaryColor.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(4),
                       ),
-                      child: Row(
+                      child: const Row(
                         mainAxisSize: MainAxisSize.min,
-                        children: const [
+                        children: [
                           Icon(
                             Icons.auto_awesome,
                             size: 10,
@@ -314,36 +385,60 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
-  void _refreshEmails() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('正在刷新邮件...'),
-        duration: Duration(seconds: 2),
-      ),
-    );
+  Future<void> _refreshEmails() async {
+    if (_isRefreshing) return;
     
     setState(() {
-      // 触发重建以显示加载状态
+      _isRefreshing = true;
     });
+
+    try {
+      final emails = await _emailService.refreshEmails();
+      
+      if (mounted) {
+        setState(() {
+          _emails = emails;
+          _isRefreshing = false;
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('邮件已刷新'),
+            duration: Duration(seconds: 1),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isRefreshing = false;
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('刷新失败: $e')),
+        );
+      }
+    }
   }
 
-  void _openEmailReader(Map<String, dynamic> emailData) {
-    // 创建模拟的EmailMessage对象
-    final email = EmailMessage(
-      accountId: 1,
-      messageId: 'msg_${emailData['id']}',
-      subject: emailData['subject'],
-      senderName: emailData['senderName'],
-      senderEmail: emailData['sender'],
-      contentText: emailData['preview'],
-      contentHtml: '<p>${emailData['preview']}</p>',
-      receivedDate: DateTime.now().subtract(Duration(hours: emailData['id'] + 1)),
-      isRead: emailData['isRead'],
-      isStarred: emailData['isStarred'],
-      aiSummary: emailData['hasSummary'] ? '这是一篇关于${emailData['category']}的新闻邮件，包含了最新的行业动态和技术进展。' : null,
-      createdAt: DateTime.now(),
-    );
+  String _formatTime(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+    
+    if (difference.inMinutes < 1) {
+      return '刚刚';
+    } else if (difference.inHours < 1) {
+      return '${difference.inMinutes}分钟前';
+    } else if (difference.inDays < 1) {
+      return '${difference.inHours}小时前';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays}天前';
+    } else {
+      return '${dateTime.month}/${dateTime.day}';
+    }
+  }
 
+  void _openEmailReader(EmailMessage email) {
     Navigator.push(
       context,
       AnimationUtils.createPageRoute(
@@ -353,22 +448,27 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
-  void _toggleStar(Map<String, dynamic> emailData) {
-    setState(() {
-      emailData['isStarred'] = !emailData['isStarred'];
-    });
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          emailData['isStarred'] ? '已收藏邮件' : '已取消收藏',
+  void _toggleStar(EmailMessage email) async {
+    try {
+      await _emailService.toggleStar(email.messageId);
+      await _loadEmails(); // 重新加载邮件列表
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            email.isStarred ? '已取消收藏' : '已收藏邮件',
+          ),
+          duration: const Duration(seconds: 1),
         ),
-        duration: const Duration(seconds: 1),
-      ),
-    );
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('操作失败: $e')),
+      );
+    }
   }
 
-  void _showEmailOptions(Map<String, dynamic> emailData) {
+  void _showEmailOptions(EmailMessage emailData) {
     showModalBottomSheet(
       context: context,
       backgroundColor: AppTheme.surfaceColor,
@@ -391,17 +491,22 @@ class _HomePageState extends ConsumerState<HomePage> {
             const SizedBox(height: 16),
             ListTile(
               leading: const Icon(Icons.mark_email_read),
-              title: Text(emailData['isRead'] ? '标记为未读' : '标记为已读'),
-              onTap: () {
+              title: Text(emailData.isRead ? '标记为未读' : '标记为已读'),
+              onTap: () async {
                 Navigator.pop(context);
-                setState(() {
-                  emailData['isRead'] = !emailData['isRead'];
-                });
+                try {
+                  await _emailService.markAsRead(emailData.messageId, !emailData.isRead);
+                  await _loadEmails();
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('操作失败: $e')),
+                  );
+                }
               },
             ),
             ListTile(
-              leading: Icon(emailData['isStarred'] ? Icons.star_border : Icons.star),
-              title: Text(emailData['isStarred'] ? '取消收藏' : '收藏'),
+              leading: Icon(emailData.isStarred ? Icons.star_border : Icons.star),
+              title: Text(emailData.isStarred ? '取消收藏' : '收藏'),
               onTap: () {
                 Navigator.pop(context);
                 _toggleStar(emailData);
@@ -445,38 +550,69 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
-  void _generateAISummary(Map<String, dynamic> emailData) {
-    // TODO: 实现AI总结功能
+  void _generateAISummary(EmailMessage emailData) async {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('正在生成AI总结...')),
     );
+    
+    try {
+      final summary = await _emailService.generateAISummary(emailData.messageId);
+      await _loadEmails();
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('AI总结已生成: $summary')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('生成总结失败: $e')),
+      );
+    }
   }
 
-  void _translateEmail(Map<String, dynamic> emailData) {
-    // TODO: 实现翻译功能
+  void _translateEmail(EmailMessage emailData) async {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('正在翻译邮件...')),
     );
+    
+    try {
+      final translated = await _emailService.translateEmail(emailData.messageId, '中文');
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('翻译完成: ${translated.substring(0, 50)}...')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('翻译失败: $e')),
+      );
+    }
   }
 
-  void _shareEmail(Map<String, dynamic> emailData) {
-    // TODO: 实现分享功能
+  void _shareEmail(EmailMessage emailData) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('分享功能开发中...')),
     );
   }
 
-  void _deleteEmail(Map<String, dynamic> emailData) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('已删除邮件: ${emailData['subject']}'),
-        action: SnackBarAction(
-          label: '撤销',
-          onPressed: () {
-            // TODO: 撤销删除操作
-          },
+  void _deleteEmail(EmailMessage emailData) async {
+    try {
+      await _emailService.deleteEmail(emailData.messageId);
+      await _loadEmails();
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('已删除邮件: ${emailData.subject}'),
+          action: SnackBarAction(
+            label: '撤销',
+            onPressed: () {
+              // TODO: 撤销删除操作
+            },
+          ),
         ),
-      ),
-    );
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('删除失败: $e')),
+      );
+    }
   }
 }

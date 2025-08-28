@@ -128,7 +128,7 @@ class _AccountManagementSectionState extends ConsumerState<AccountManagementSect
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: AppTheme.primaryColor.withOpacity(0.2),
+                    color: AppTheme.primaryColor.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
@@ -144,8 +144,8 @@ class _AccountManagementSectionState extends ConsumerState<AccountManagementSect
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
                     color: account.isActive 
-                        ? Colors.green.withOpacity(0.2)
-                        : Colors.grey.withOpacity(0.2),
+                        ? Colors.green.withValues(alpha: 0.2)
+                        : Colors.grey.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
@@ -431,7 +431,11 @@ class _AccountManagementSectionState extends ConsumerState<AccountManagementSect
 
   Future<void> _toggleAccountStatus(EmailAccount account) async {
     try {
-      await _accountRepository.toggleAccountStatus(account.id!, !account.isActive);
+      if (account.isActive) {
+        await _accountRepository.deactivateAccount(account.id!);
+      } else {
+        await _accountRepository.activateAccount(account.id!);
+      }
       await _loadAccounts();
       
       if (mounted) {

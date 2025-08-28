@@ -17,12 +17,12 @@ class AppTheme {
       colorScheme: const ColorScheme.dark(
         primary: primaryColor,
         secondary: secondaryColor,
-        background: backgroundColor,
-        surface: surfaceColor,
+        surface: backgroundColor,
+        surfaceContainerHighest: surfaceColor,
         onPrimary: Colors.white,
         onSecondary: Colors.black,
-        onBackground: textPrimaryColor,
         onSurface: textPrimaryColor,
+        onSurfaceVariant: textPrimaryColor,
       ),
       
       // App Bar Theme
@@ -39,7 +39,7 @@ class AppTheme {
       ),
       
       // Card Theme
-      cardTheme: CardTheme(
+        cardTheme: CardThemeData(
         color: cardColor,
         elevation: 2,
         shape: RoundedRectangleBorder(

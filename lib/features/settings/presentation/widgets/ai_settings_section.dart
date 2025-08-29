@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/services/ai_service.dart';
+import '../../../../core/services/settings_service.dart';
 
 class AISettingsSection extends ConsumerStatefulWidget {
   const AISettingsSection({super.key});
@@ -12,6 +13,7 @@ class AISettingsSection extends ConsumerStatefulWidget {
 
 class _AISettingsSectionState extends ConsumerState<AISettingsSection> {
   final AIService _aiService = AIService();
+  final SettingsService _settingsService = SettingsService();
   
   String _selectedProvider = 'suanli';
   String _apiKey = '';
@@ -19,11 +21,24 @@ class _AISettingsSectionState extends ConsumerState<AISettingsSection> {
   String _model = 'free:QwQ-32B';
   bool _isTestingConnection = false;
   bool _connectionStatus = false;
+  bool _autoSummary = true;
+  bool _batchSummary = false;
 
   @override
   void initState() {
     super.initState();
     _loadSettings();
+    _loadSwitchSettings();
+  }
+
+  Future<void> _loadSwitchSettings() async {
+    final autoSummary = await _settingsService.getAutoSummary();
+    final batchSummary = await _settingsService.getBatchSummary();
+    
+    setState(() {
+      _autoSummary = autoSummary;
+      _batchSummary = batchSummary;
+    });
   }
 
   Future<void> _loadSettings() async {
@@ -217,18 +232,24 @@ class _AISettingsSectionState extends ConsumerState<AISettingsSection> {
         SwitchListTile(
           title: const Text('自动生成总结'),
           subtitle: const Text('阅读邮件时自动生成AI总结'),
-          value: true,
-          onChanged: (value) {
-            // TODO: 保存设置
+          value: _autoSummary,
+          onChanged: (value) async {
+            await _settingsService.setAutoSummary(value);
+            setState(() {
+              _autoSummary = value;
+            });
           },
           activeColor: AppTheme.primaryColor,
         ),
         SwitchListTile(
           title: const Text('批量总结'),
           subtitle: const Text('支持一次性总结多封邮件'),
-          value: true,
-          onChanged: (value) {
-            // TODO: 保存设置
+          value: _batchSummary,
+          onChanged: (value) async {
+            await _settingsService.setBatchSummary(value);
+            setState(() {
+              _batchSummary = value;
+            });
           },
           activeColor: AppTheme.primaryColor,
         ),

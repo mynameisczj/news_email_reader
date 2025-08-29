@@ -6,6 +6,8 @@ import 'package:share_plus/share_plus.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/models/email_message.dart';
 import '../../../../core/services/ai_service.dart';
+import '../../../../core/repositories/email_repository.dart';
+import '../../../notes/presentation/pages/note_editor_page.dart';
 
 class EmailReaderPage extends ConsumerStatefulWidget {
   final EmailMessage email;
@@ -25,6 +27,7 @@ class _EmailReaderPageState extends ConsumerState<EmailReaderPage> {
   bool _isGeneratingSummary = false;
   String? _aiSummary;
   double _fontSize = 16.0;
+  final EmailRepository _emailRepository = EmailRepository();
 
   @override
   void initState() {
@@ -33,10 +36,10 @@ class _EmailReaderPageState extends ConsumerState<EmailReaderPage> {
     _aiSummary = widget.email.aiSummary;
   }
 
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
       body: CustomScrollView(
         controller: _scrollController,
         slivers: [
@@ -55,8 +58,7 @@ class _EmailReaderPageState extends ConsumerState<EmailReaderPage> {
       expandedHeight: 120,
       floating: false,
       pinned: true,
-      backgroundColor: AppTheme.backgroundColor,
-      foregroundColor: AppTheme.textPrimaryColor,
+
       leading: IconButton(
         icon: const Icon(Icons.arrow_back),
         onPressed: () => Navigator.pop(context),
@@ -116,8 +118,8 @@ class _EmailReaderPageState extends ConsumerState<EmailReaderPage> {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
-                AppTheme.backgroundColor,
-                AppTheme.backgroundColor.withValues(alpha: 0.8),
+                Theme.of(context).scaffoldBackgroundColor,
+                Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.8),
               ],
             ),
           ),
@@ -316,10 +318,10 @@ class _EmailReaderPageState extends ConsumerState<EmailReaderPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
+        color: Theme.of(context).cardColor,
         border: Border(
           top: BorderSide(
-            color: AppTheme.textSecondaryColor.withValues(alpha: 0.2),
+            color: Theme.of(context).dividerColor,
             width: 1,
           ),
         ),
@@ -395,11 +397,28 @@ class _EmailReaderPageState extends ConsumerState<EmailReaderPage> {
     );
   }
 
-  void _toggleStar() {
-    setState(() {
-      _isStarred = !_isStarred;
-    });
-    // TODO: 更新数据库中的收藏状态
+  Future<void> _toggleStar() async {
+    try {
+      final newStarredState = !_isStarred;
+      final updatedEmail = widget.email.copyWith(isStarred: newStarredState);
+      
+      await _emailRepository.updateEmail(updatedEmail);
+      
+      setState(() {
+        _isStarred = newStarredState;
+      });
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(newStarredState ? '已添加到收藏' : '已取消收藏'),
+          duration: const Duration(seconds: 1),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('更新收藏状态失败: $e')),
+      );
+    }
   }
 
   void _shareEmail() {
@@ -443,12 +462,23 @@ ${widget.email.contentText ?? ''}
         content,
       );
 
+      // 保存总结到数据库
+      final updatedEmail = widget.email.copyWith(aiSummary: summary);
+      await _emailRepository.updateEmail(updatedEmail);
+
       setState(() {
         _aiSummary = summary;
         _isGeneratingSummary = false;
       });
 
-      // TODO: 保存总结到数据库
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('AI总结已生成并保存'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
     } catch (e) {
       setState(() {
         _isGeneratingSummary = false;
@@ -472,11 +502,24 @@ ${widget.email.contentText ?? ''}
     );
   }
 
-  void _addNote() {
-    // TODO: 实现笔记功能
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('笔记功能开发中...')),
+  void _addNote() async {
+    final result = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => NoteEditorPage(email: widget.email),
+      ),
     );
+    
+    // 如果笔记有更新，可以在这里刷新页面状态
+    if (result == true) {
+      // 笔记已更新
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('笔记已保存'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
   }
 
   void _showFontSizeDialog() {
@@ -538,6 +581,7 @@ ${widget.email.contentText ?? ''}
   String _formatTime(DateTime date) {
     return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
   }
+
 
   @override
   void dispose() {

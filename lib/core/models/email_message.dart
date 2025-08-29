@@ -13,6 +13,7 @@ class EmailMessage {
   final bool isStarred;
   final bool isCached;
   final String? aiSummary;
+  final String? notes;
   final DateTime createdAt;
 
   EmailMessage({
@@ -30,6 +31,7 @@ class EmailMessage {
     this.isStarred = false,
     this.isCached = false,
     this.aiSummary,
+    this.notes,
     required this.createdAt,
   });
 
@@ -49,6 +51,7 @@ class EmailMessage {
       'is_starred': isStarred ? 1 : 0,
       'is_cached': isCached ? 1 : 0,
       'ai_summary': aiSummary,
+      'notes': notes,
       'created_at': createdAt.toIso8601String(),
     };
   }
@@ -69,7 +72,51 @@ class EmailMessage {
       isStarred: map['is_starred'] == 1,
       isCached: map['is_cached'] == 1,
       aiSummary: map['ai_summary'],
+      notes: map['notes'],
       createdAt: DateTime.parse(map['created_at']),
+    );
+  }
+
+  // JSON序列化支持
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id?.toString(),
+      'accountId': accountId,
+      'messageId': messageId,
+      'subject': subject,
+      'senderName': senderName,
+      'senderEmail': senderEmail,
+      'recipientEmail': recipientEmail,
+      'contentText': contentText,
+      'contentHtml': contentHtml,
+      'receivedDate': receivedDate.toIso8601String(),
+      'isRead': isRead,
+      'isStarred': isStarred,
+      'isCached': isCached,
+      'aiSummary': aiSummary,
+      'notes': notes,
+      'createdAt': createdAt.toIso8601String(),
+    };
+  }
+
+  factory EmailMessage.fromJson(Map<String, dynamic> json) {
+    return EmailMessage(
+      id: json['id'] != null ? int.tryParse(json['id'].toString()) : null,
+      accountId: json['accountId'] ?? 0,
+      messageId: json['messageId'] ?? '',
+      subject: json['subject'] ?? '',
+      senderName: json['senderName'],
+      senderEmail: json['senderEmail'] ?? '',
+      recipientEmail: json['recipientEmail'],
+      contentText: json['contentText'],
+      contentHtml: json['contentHtml'],
+      receivedDate: DateTime.parse(json['receivedDate']),
+      isRead: json['isRead'] ?? false,
+      isStarred: json['isStarred'] ?? false,
+      isCached: json['isCached'] ?? false,
+      aiSummary: json['aiSummary'],
+      notes: json['notes'],
+      createdAt: DateTime.parse(json['createdAt']),
     );
   }
 
@@ -88,6 +135,7 @@ class EmailMessage {
     bool? isStarred,
     bool? isCached,
     String? aiSummary,
+    String? notes,
     DateTime? createdAt,
   }) {
     return EmailMessage(
@@ -105,6 +153,7 @@ class EmailMessage {
       isStarred: isStarred ?? this.isStarred,
       isCached: isCached ?? this.isCached,
       aiSummary: aiSummary ?? this.aiSummary,
+      notes: notes ?? this.notes,
       createdAt: createdAt ?? this.createdAt,
     );
   }

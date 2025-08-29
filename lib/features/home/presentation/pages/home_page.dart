@@ -6,6 +6,10 @@ import '../../../../core/utils/animation_utils.dart';
 import '../../../../core/services/mock_email_service.dart';
 import '../../../reader/presentation/pages/email_reader_page.dart';
 import '../../../settings/presentation/pages/settings_page.dart';
+import '../../../notes/presentation/pages/notes_page.dart';
+import '../../../search/presentation/pages/search_page.dart';
+import '../../../favorites/presentation/pages/favorites_page.dart';
+import '../../../help/presentation/pages/help_page.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -67,8 +71,8 @@ class _HomePageState extends ConsumerState<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
       appBar: _buildAppBar(),
+      drawer: _buildDrawer(),
       body: Column(
         children: [
           _buildFilterTabs(),
@@ -104,30 +108,27 @@ class _HomePageState extends ConsumerState<HomePage> {
           ),
         ],
       ),
-      leading: IconButton(
-        icon: const Icon(Icons.menu),
-        onPressed: () {
-          // TODO: 打开侧边栏
-        },
+      leading: Builder(
+        builder: (context) => IconButton(
+          icon: const Icon(Icons.menu),
+          onPressed: () {
+            Scaffold.of(context).openDrawer();
+          },
+        ),
       ),
       actions: [
         IconButton(
           icon: const Icon(Icons.search),
           onPressed: () {
-            // TODO: 搜索功能
-          },
-        ),
-        IconButton(
-          icon: const Icon(Icons.settings),
-          onPressed: () {
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (context) => const SettingsPage(),
+                builder: (context) => const SearchPage(),
               ),
             );
           },
         ),
+
       ],
     );
   }
@@ -614,5 +615,149 @@ class _HomePageState extends ConsumerState<HomePage> {
         SnackBar(content: Text('删除失败: $e')),
       );
     }
+  }
+
+  Widget _buildDrawer() {
+    return Drawer(
+      child: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          const DrawerHeader(
+            decoration: BoxDecoration(
+              color: AppTheme.primaryColor,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CircleAvatar(
+                  radius: 30,
+                  backgroundColor: Colors.white,
+                  child: Icon(
+                    Icons.email,
+                    size: 30,
+                    color: AppTheme.primaryColor,
+                  ),
+                ),
+                SizedBox(height: 16),
+                Text(
+                  '新闻邮件阅读器',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  'v0.2.1',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.inbox),
+            title: const Text('邮件列表'),
+            onTap: () {
+              Navigator.pop(context);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.note),
+            title: const Text('我的笔记'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const NotesPage(),
+                ),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.star),
+            title: const Text('收藏邮件'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const FavoritesPage(),
+                ),
+              );
+            },
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.settings),
+            title: const Text('设置'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const SettingsPage(),
+                ),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.help),
+            title: const Text('帮助'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const HelpPage(),
+                ),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.info),
+            title: const Text('关于'),
+            onTap: () {
+              Navigator.pop(context);
+              _showAboutDialog();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAboutDialog() {
+    showAboutDialog(
+      context: context,
+      applicationName: '新闻邮件阅读器',
+      applicationVersion: '0.2.1',
+      applicationIcon: Container(
+        width: 64,
+        height: 64,
+        decoration: BoxDecoration(
+          color: AppTheme.primaryColor,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Icon(
+          Icons.email,
+          color: Colors.white,
+          size: 32,
+        ),
+      ),
+      children: const [
+        Text('专为极客用户设计的新闻邮件阅读应用'),
+        SizedBox(height: 16),
+        Text('功能特性：'),
+        Text('• 多协议邮件支持'),
+        Text('• 智能白名单筛选'),
+        Text('• AI邮件总结'),
+        Text('• 纯净阅读体验'),
+        Text('• 笔记功能'),
+      ],
+    );
   }
 }

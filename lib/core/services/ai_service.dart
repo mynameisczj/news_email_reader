@@ -42,7 +42,11 @@ class AIService {
 
       if (response.statusCode == 200) {
         final data = response.data;
-        final summary = data['choices'][0]['message']['content'];
+        String summary = data['choices'][0]['message']['content'];
+        
+        // 去掉思考标签内的内容
+        summary = _removeThinkingTags(summary);
+        
         return summary.trim();
       } else {
         throw Exception('API请求失败: ${response.statusCode}');
@@ -258,5 +262,21 @@ $content
       print('API连接测试失败: $e');
       return false;
     }
+  }
+
+  /// 去掉思考标签内的内容
+  String _removeThinkingTags(String text) {
+    // 移除 <thinking>...</thinking> 标签及其内容
+    final thinkingRegex = RegExp(r'<thinking>.*?</thinking>', dotAll: true);
+    text = text.replaceAll(thinkingRegex, '');
+    
+    // 移除 <think>...</think> 标签及其内容
+    final thinkRegex = RegExp(r'<think>.*?</think>', dotAll: true);
+    text = text.replaceAll(thinkRegex, '');
+    
+    // 清理多余的空白字符
+    text = text.replaceAll(RegExp(r'\s+'), ' ').trim();
+    
+    return text;
   }
 }

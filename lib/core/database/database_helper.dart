@@ -64,6 +64,7 @@ class DatabaseHelper {
         is_starred INTEGER NOT NULL DEFAULT 0,
         is_cached INTEGER NOT NULL DEFAULT 0,
         ai_summary TEXT,
+        notes TEXT,
         created_at TEXT NOT NULL,
         FOREIGN KEY (account_id) REFERENCES email_accounts (id) ON DELETE CASCADE
       )

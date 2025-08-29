@@ -1,7 +1,7 @@
-import 'package:sqflite/sqflite.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/email_message.dart';
 import '../models/email_account.dart';
-import '../database/database_helper.dart';
+import '../services/storage_service.dart';
 import '../services/email_service.dart';
 import '../services/whitelist_service.dart';
 
@@ -10,37 +10,23 @@ class EmailRepository {
   factory EmailRepository() => _instance;
   EmailRepository._internal();
 
-  final DatabaseHelper _db = DatabaseHelper.instance;
+  final StorageService _storage = StorageService.instance;
   final EmailService _emailService = EmailService();
   final WhitelistService _whitelistService = WhitelistService();
 
-  /// 保存邮件到本地数据库
-  Future<int> saveEmail(EmailMessage email) async {
-    final database = await _db.database;
-    return await database.insert(
-      'emails',
-      email.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+  /// 保存邮件到本地存储
+  Future<void> saveEmail(EmailMessage email) async {
+    await _storage.saveEmail(email);
   }
 
   /// 批量保存邮件
   Future<void> saveEmails(List<EmailMessage> emails) async {
-    final database = await _db.database;
-    final batch = database.batch();
-    
     for (final email in emails) {
-      batch.insert(
-        'emails',
-        email.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      await _storage.saveEmail(email);
     }
-    
-    await batch.commit();
   }
 
-  /// 从本地数据库获取邮件列表
+  /// 从本地存储获取邮件列表
   Future<List<EmailMessage>> getLocalEmails({
     int? accountId,
     int limit = 50,
@@ -50,46 +36,41 @@ class EmailRepository {
     DateTime? startDate,
     DateTime? endDate,
   }) async {
-    final database = await _db.database;
+    List<EmailMessage> emails = await _storage.getAllEmails();
     
-    String whereClause = '1=1';
-    List<dynamic> whereArgs = [];
-    
+    // 应用筛选条件
     if (accountId != null) {
-      whereClause += ' AND account_id = ?';
-      whereArgs.add(accountId);
+      emails = emails.where((email) => email.accountId == accountId).toList();
     }
     
     if (isRead != null) {
-      whereClause += ' AND is_read = ?';
-      whereArgs.add(isRead ? 1 : 0);
+      emails = emails.where((email) => email.isRead == isRead).toList();
     }
     
     if (isStarred != null) {
-      whereClause += ' AND is_starred = ?';
-      whereArgs.add(isStarred ? 1 : 0);
+      emails = emails.where((email) => email.isStarred == isStarred).toList();
     }
     
     if (startDate != null) {
-      whereClause += ' AND received_date >= ?';
-      whereArgs.add(startDate.toIso8601String());
+      emails = emails.where((email) => email.receivedDate.isAfter(startDate) || email.receivedDate.isAtSameMomentAs(startDate)).toList();
     }
     
     if (endDate != null) {
-      whereClause += ' AND received_date <= ?';
-      whereArgs.add(endDate.toIso8601String());
+      emails = emails.where((email) => email.receivedDate.isBefore(endDate) || email.receivedDate.isAtSameMomentAs(endDate)).toList();
     }
     
-    final maps = await database.query(
-      'emails',
-      where: whereClause,
-      whereArgs: whereArgs,
-      orderBy: 'received_date DESC',
-      limit: limit,
-      offset: offset,
-    );
+    // 按接收时间降序排序
+    emails.sort((a, b) => b.receivedDate.compareTo(a.receivedDate));
     
-    return maps.map((map) => EmailMessage.fromMap(map)).toList();
+    // 应用分页
+    if (offset > 0) {
+      emails = emails.skip(offset).toList();
+    }
+    if (limit > 0 && emails.length > limit) {
+      emails = emails.take(limit).toList();
+    }
+    
+    return emails;
   }
 
   /// 同步邮件（从服务器获取并筛选）
@@ -101,7 +82,7 @@ class EmailRepository {
       // 通过白名单筛选
       final filteredEmails = await _whitelistService.filterEmails(serverEmails);
       
-      // 保存到本地数据库
+      // 保存到本地存储
       await saveEmails(filteredEmails);
       
       return filteredEmails;
@@ -113,51 +94,32 @@ class EmailRepository {
   }
 
   /// 获取邮件详细内容
-  Future<EmailMessage?> getEmailContent(int emailId) async {
-    final database = await _db.database;
-    final maps = await database.query(
-      'emails',
-      where: 'id = ?',
-      whereArgs: [emailId],
-    );
-    
-    if (maps.isNotEmpty) {
-      return EmailMessage.fromMap(maps.first);
-    }
-    
-    return null;
+  Future<EmailMessage?> getEmailContent(String emailId) async {
+    return await _storage.getEmailById(emailId);
   }
 
   /// 更新邮件状态
-  Future<int> updateEmailStatus(
-    int emailId, {
+  Future<void> updateEmailStatus(
+    String emailId, {
     bool? isRead,
     bool? isStarred,
     String? aiSummary,
   }) async {
-    final database = await _db.database;
-    final Map<String, dynamic> updates = {};
+    final email = await _storage.getEmailById(emailId);
+    if (email == null) return;
     
-    if (isRead != null) {
-      updates['is_read'] = isRead ? 1 : 0;
-    }
-    
-    if (isStarred != null) {
-      updates['is_starred'] = isStarred ? 1 : 0;
-    }
-    
-    if (aiSummary != null) {
-      updates['ai_summary'] = aiSummary;
-    }
-    
-    if (updates.isEmpty) return 0;
-    
-    return await database.update(
-      'emails',
-      updates,
-      where: 'id = ?',
-      whereArgs: [emailId],
+    final updatedEmail = email.copyWith(
+      isRead: isRead ?? email.isRead,
+      isStarred: isStarred ?? email.isStarred,
+      aiSummary: aiSummary ?? email.aiSummary,
     );
+    
+    await _storage.updateEmail(updatedEmail);
+  }
+
+  /// 更新邮件
+  Future<void> updateEmail(EmailMessage email) async {
+    await _storage.updateEmail(email);
   }
 
   /// 搜索邮件
@@ -166,25 +128,31 @@ class EmailRepository {
     int? accountId,
     int limit = 50,
   }) async {
-    final database = await _db.database;
+    List<EmailMessage> emails = await _storage.getAllEmails();
     
-    String whereClause = '(subject LIKE ? OR sender_name LIKE ? OR sender_email LIKE ? OR content_text LIKE ?)';
-    List<dynamic> whereArgs = ['%$query%', '%$query%', '%$query%', '%$query%'];
-    
+    // 应用账户筛选
     if (accountId != null) {
-      whereClause += ' AND account_id = ?';
-      whereArgs.add(accountId);
+      emails = emails.where((email) => email.accountId == accountId).toList();
     }
     
-    final maps = await database.query(
-      'emails',
-      where: whereClause,
-      whereArgs: whereArgs,
-      orderBy: 'received_date DESC',
-      limit: limit,
-    );
+    // 搜索匹配
+    final lowerQuery = query.toLowerCase();
+    emails = emails.where((email) {
+      return email.subject.toLowerCase().contains(lowerQuery) ||
+             (email.senderName?.toLowerCase().contains(lowerQuery) ?? false) ||
+             email.senderEmail.toLowerCase().contains(lowerQuery) ||
+             (email.contentText?.toLowerCase().contains(lowerQuery) ?? false);
+    }).toList();
     
-    return maps.map((map) => EmailMessage.fromMap(map)).toList();
+    // 按接收时间降序排序
+    emails.sort((a, b) => b.receivedDate.compareTo(a.receivedDate));
+    
+    // 应用限制
+    if (limit > 0 && emails.length > limit) {
+      emails = emails.take(limit).toList();
+    }
+    
+    return emails;
   }
 
   /// 获取今日邮件
@@ -214,45 +182,62 @@ class EmailRepository {
 
   /// 获取已总结的邮件
   Future<List<EmailMessage>> getSummarizedEmails({int? accountId}) async {
-    final database = await _db.database;
+    List<EmailMessage> emails = await _storage.getAllEmails();
     
-    String whereClause = 'ai_summary IS NOT NULL AND ai_summary != ""';
-    List<dynamic> whereArgs = [];
+    // 筛选有AI总结的邮件
+    emails = emails.where((email) => 
+      email.aiSummary != null && email.aiSummary!.isNotEmpty
+    ).toList();
     
+    // 应用账户筛选
     if (accountId != null) {
-      whereClause += ' AND account_id = ?';
-      whereArgs.add(accountId);
+      emails = emails.where((email) => email.accountId == accountId).toList();
     }
     
-    final maps = await database.query(
-      'emails',
-      where: whereClause,
-      whereArgs: whereArgs,
-      orderBy: 'received_date DESC',
-    );
+    // 按接收时间降序排序
+    emails.sort((a, b) => b.receivedDate.compareTo(a.receivedDate));
     
-    return maps.map((map) => EmailMessage.fromMap(map)).toList();
+    return emails;
   }
 
   /// 删除邮件
-  Future<int> deleteEmail(int emailId) async {
-    final database = await _db.database;
-    return await database.delete(
-      'emails',
-      where: 'id = ?',
-      whereArgs: [emailId],
-    );
+  Future<void> deleteEmail(String emailId) async {
+    await _storage.deleteEmail(emailId);
   }
 
   /// 清理过期邮件（保留最近30天）
   Future<int> cleanupOldEmails() async {
-    final database = await _db.database;
+    final emails = await _storage.getAllEmails();
     final thirtyDaysAgo = DateTime.now().subtract(const Duration(days: 30));
     
-    return await database.delete(
-      'emails',
-      where: 'received_date < ? AND is_starred = 0',
-      whereArgs: [thirtyDaysAgo.toIso8601String()],
-    );
+    int deletedCount = 0;
+    for (final email in emails) {
+      if (email.receivedDate.isBefore(thirtyDaysAgo) && !email.isStarred) {
+        await _storage.deleteEmail(email.messageId);
+        deletedCount++;
+      }
+    }
+    
+    return deletedCount;
+  }
+
+  /// 获取收藏的邮件
+  Future<List<EmailMessage>> getStarredEmails() async {
+    return await _storage.getFavoriteEmails();
+  }
+
+  /// 获取收藏的邮件（别名方法）
+  Future<List<EmailMessage>> getFavoriteEmails() async {
+    return await getStarredEmails();
+  }
+
+  /// 获取有笔记的邮件
+  Future<List<EmailMessage>> getEmailsWithNotes() async {
+    return await _storage.getEmailsWithNotes();
   }
 }
+
+// Provider for EmailRepository
+final emailRepositoryProvider = Provider<EmailRepository>((ref) {
+  return EmailRepository();
+});

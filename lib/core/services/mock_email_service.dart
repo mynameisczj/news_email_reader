@@ -1,11 +1,14 @@
 import 'dart:async';
 import '../models/email_message.dart';
+import 'storage_service.dart';
 
 /// 模拟邮件服务，用于演示和测试
 class MockEmailService {
   static final MockEmailService _instance = MockEmailService._internal();
   factory MockEmailService() => _instance;
   MockEmailService._internal();
+  
+  final StorageService _storage = StorageService.instance;
 
   // 模拟邮件数据
   final List<EmailMessage> _mockEmails = [
@@ -60,7 +63,23 @@ class MockEmailService {
     // 模拟网络延迟
     await Future.delayed(const Duration(milliseconds: 500));
     
-    var emails = List<EmailMessage>.from(_mockEmails);
+    // 尝试从存储服务获取邮件数据
+    List<EmailMessage> emails;
+    try {
+      final storedEmails = await _storage.getAllEmails();
+      if (storedEmails.isNotEmpty) {
+        emails = storedEmails;
+      } else {
+        // 如果存储中没有数据，使用模拟数据并保存
+        emails = List<EmailMessage>.from(_mockEmails);
+        for (final email in emails) {
+          await _storage.saveEmail(email);
+        }
+      }
+    } catch (e) {
+      print('从存储服务获取邮件失败: $e');
+      emails = List<EmailMessage>.from(_mockEmails);
+    }
     
     // 应用筛选
     if (filter != null) {
@@ -101,15 +120,20 @@ class MockEmailService {
     }
   }
 
-  /// 收藏/取消收藏邮件
+  /// 收藏/取消收藏邮件（按 messageId）
   Future<void> toggleStar(String messageId) async {
     await Future.delayed(const Duration(milliseconds: 200));
-    
     final index = _mockEmails.indexWhere((email) => email.messageId == messageId);
     if (index != -1) {
-      _mockEmails[index] = _mockEmails[index].copyWith(
+      final updatedEmail = _mockEmails[index].copyWith(
         isStarred: !_mockEmails[index].isStarred,
       );
+      _mockEmails[index] = updatedEmail;
+      try {
+        await _storage.saveEmail(updatedEmail);
+      } catch (e) {
+        print('保存收藏状态失败: $e');
+      }
     }
   }
 
@@ -120,14 +144,19 @@ class MockEmailService {
     _mockEmails.removeWhere((email) => email.messageId == messageId);
   }
 
-  /// 生成AI总结
+  /// 生成AI总结（按 messageId）
   Future<String> generateAISummary(String messageId) async {
     await Future.delayed(const Duration(seconds: 2));
-    
     final index = _mockEmails.indexWhere((email) => email.messageId == messageId);
     if (index != -1) {
       final summary = '这是一篇关于${_mockEmails[index].subject}的邮件总结，包含了主要内容和关键信息。';
-      _mockEmails[index] = _mockEmails[index].copyWith(aiSummary: summary);
+      final updatedEmail = _mockEmails[index].copyWith(aiSummary: summary);
+      _mockEmails[index] = updatedEmail;
+      try {
+        await _storage.saveEmail(updatedEmail);
+      } catch (e) {
+        print('保存AI总结失败: $e');
+      }
       return summary;
     }
     

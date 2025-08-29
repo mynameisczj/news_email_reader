@@ -29,8 +29,6 @@ class _HomePageState extends ConsumerState<HomePage> {
     '全部',
     '今日',
     '本周',
-    '已总结',
-    '已收藏',
   ];
 
   @override

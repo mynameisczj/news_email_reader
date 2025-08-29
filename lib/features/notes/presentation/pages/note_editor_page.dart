@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/models/email_message.dart';
 import '../../../../core/repositories/email_repository.dart';
+import '../../../../core/services/storage_service.dart';
 
 class NoteEditorPage extends ConsumerStatefulWidget {
   final EmailMessage email;
@@ -24,8 +25,31 @@ class _NoteEditorPageState extends ConsumerState<NoteEditorPage> {
   @override
   void initState() {
     super.initState();
-    _notesController = TextEditingController(text: widget.email.notes ?? '');
+    _notesController = TextEditingController();
     _notesController.addListener(_onTextChanged);
+    _loadExistingNote();
+  }
+
+  Future<void> _loadExistingNote() async {
+    try {
+      // 从StorageService加载最新的邮件数据
+      final storageService = StorageService.instance;
+      final emails = await storageService.getAllEmails();
+      final currentEmail = emails.firstWhere(
+        (e) => e.messageId == widget.email.messageId,
+        orElse: () => widget.email,
+      );
+      
+      final noteText = currentEmail.notes ?? '';
+      setState(() {
+        _notesController.text = noteText;
+      });
+    } catch (e) {
+      // 如果加载失败，使用传入的email中的笔记
+      setState(() {
+        _notesController.text = widget.email.notes ?? '';
+      });
+    }
   }
 
   @override

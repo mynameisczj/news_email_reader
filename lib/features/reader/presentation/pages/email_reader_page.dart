@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/models/email_message.dart';
 import '../../../../core/services/ai_service.dart';
+
 import '../../../../core/repositories/email_repository.dart';
 import '../../../notes/presentation/pages/note_editor_page.dart';
 
@@ -75,40 +76,10 @@ class _EmailReaderPageState extends ConsumerState<EmailReaderPage> {
           icon: const Icon(Icons.share),
           onPressed: _shareEmail,
         ),
-        PopupMenuButton<String>(
-          onSelected: _handleMenuAction,
-          itemBuilder: (context) => [
-            const PopupMenuItem(
-              value: 'translate',
-              child: Row(
-                children: [
-                  Icon(Icons.translate),
-                  SizedBox(width: 8),
-                  Text('翻译'),
-                ],
-              ),
-            ),
-            const PopupMenuItem(
-              value: 'note',
-              child: Row(
-                children: [
-                  Icon(Icons.note_add),
-                  SizedBox(width: 8),
-                  Text('添加笔记'),
-                ],
-              ),
-            ),
-            const PopupMenuItem(
-              value: 'font_size',
-              child: Row(
-                children: [
-                  Icon(Icons.format_size),
-                  SizedBox(width: 8),
-                  Text('字体大小'),
-                ],
-              ),
-            ),
-          ],
+        IconButton(
+          icon: const Icon(Icons.more_vert),
+          tooltip: '更多',
+          onPressed: _showMoreMenuBottomSheet,
         ),
       ],
       flexibleSpace: FlexibleSpaceBar(
@@ -402,22 +373,31 @@ class _EmailReaderPageState extends ConsumerState<EmailReaderPage> {
       final newStarredState = !_isStarred;
       final updatedEmail = widget.email.copyWith(isStarred: newStarredState);
       
+      // 同时更新repository和mock service
+      // 同时更新repository和mock service
+      // 持久化到仓库（基于messageId保存）
       await _emailRepository.updateEmail(updatedEmail);
+
+
       
       setState(() {
         _isStarred = newStarredState;
       });
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(newStarredState ? '已添加到收藏' : '已取消收藏'),
-          duration: const Duration(seconds: 1),
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(newStarredState ? '已添加到收藏' : '已取消收藏'),
+            duration: const Duration(seconds: 1),
+          ),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('更新收藏状态失败: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('更新收藏状态失败: $e')),
+        );
+      }
     }
   }
 
@@ -431,6 +411,46 @@ ${widget.email.subject}
 ${widget.email.contentText ?? ''}
 ''';
     Share.share(content);
+  }
+
+  void _showMoreMenuBottomSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.translate),
+                title: const Text('翻译'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _handleMenuAction('translate');
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.note_alt_outlined),
+                title: const Text('笔记'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _handleMenuAction('note');
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.format_size),
+                title: const Text('字体大小'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _handleMenuAction('font_size');
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   void _handleMenuAction(String action) {
@@ -450,6 +470,8 @@ ${widget.email.contentText ?? ''}
   Future<void> _generateAISummary() async {
     if (_isGeneratingSummary) return;
 
+    if (!mounted) return;
+    
     setState(() {
       _isGeneratingSummary = true;
     });
@@ -462,16 +484,16 @@ ${widget.email.contentText ?? ''}
         content,
       );
 
-      // 保存总结到数据库
+      // 保存总结到本地存储（以messageId为键）
       final updatedEmail = widget.email.copyWith(aiSummary: summary);
       await _emailRepository.updateEmail(updatedEmail);
 
-      setState(() {
-        _aiSummary = summary;
-        _isGeneratingSummary = false;
-      });
-
       if (mounted) {
+        setState(() {
+          _aiSummary = summary;
+          _isGeneratingSummary = false;
+        });
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('AI总结已生成并保存'),
@@ -480,11 +502,11 @@ ${widget.email.contentText ?? ''}
         );
       }
     } catch (e) {
-      setState(() {
-        _isGeneratingSummary = false;
-      });
-      
       if (mounted) {
+        setState(() {
+          _isGeneratingSummary = false;
+        });
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('生成总结失败: $e'),
@@ -510,15 +532,31 @@ ${widget.email.contentText ?? ''}
       ),
     );
     
-    // 如果笔记有更新，可以在这里刷新页面状态
+    // 如果笔记有更新，刷新邮件数据
     if (result == true) {
-      // 笔记已更新
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('笔记已保存'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      try {
+        // 重新获取更新后的邮件数据
+        final updatedEmail = await _emailRepository.getEmailContent(widget.email.messageId);
+        if (updatedEmail != null && mounted) {
+          // 这里可以更新widget.email的引用，但由于widget.email是final的，
+          // 我们只显示成功消息，实际的笔记内容会在下次进入时正确显示
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('笔记已保存'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('刷新邮件数据失败: $e'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      }
     }
   }
 

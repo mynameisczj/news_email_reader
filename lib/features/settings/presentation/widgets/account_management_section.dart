@@ -420,6 +420,22 @@ class _AccountManagementSectionState extends ConsumerState<AccountManagementSect
           SnackBar(content: Text('账户${existingAccount != null ? '更新' : '添加'}成功')),
         );
       }
+    } on DuplicateAccountException catch (e) {
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: const Text('账户重复'),
+            content: Text(e.message),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('我知道了'),
+              ),
+            ],
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

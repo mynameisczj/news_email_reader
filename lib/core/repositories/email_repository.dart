@@ -87,9 +87,10 @@ class EmailRepository {
 
       return filteredEmails;
     } catch (e) {
+      // ignore: avoid_print
       print('同步邮件失败: $e');
-      // 如果同步失败，返回本地缓存的邮件
-      return await getLocalEmails(accountId: account.id);
+      // 同步失败时向上抛出异常，由调用方处理
+      rethrow;
     }
   }
 

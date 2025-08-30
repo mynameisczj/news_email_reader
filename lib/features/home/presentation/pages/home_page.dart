@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:enough_mail/enough_mail.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/models/email_message.dart';
 import '../../../../core/utils/animation_utils.dart';
@@ -43,24 +45,26 @@ class _HomePageState extends ConsumerState<HomePage> {
   Future<void> _loadEmails() async {
     if (_isLoading) return;
 
+    // First, delete any test emails
+    await _deleteExampleEmails();
+
     setState(() {
       _isLoading = true;
     });
 
     try {
       await _syncAllActiveAccounts();
-      _applyCurrentFilter();
+      await _applyCurrentFilter(); // 使用 await
+    } catch (e) {
+      if (mounted) {
+        _showErrorDialog('加载邮件失败', e.toString());
+      }
+    } finally {
       if (mounted) {
         setState(() {
           _isLoading = false;
         });
       }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-      });
-      _showErrorDialog('加载邮件失败', e.toString());
     }
   }
 
@@ -69,53 +73,98 @@ class _HomePageState extends ConsumerState<HomePage> {
 
     if (activeAccounts.isEmpty) {
       if (mounted) {
+        setState(() {
+          _emails = [];
+        });
         _showErrorDialog('未发现邮件账户', '请前往设置添加并启用至少一个邮箱账户。');
       }
-      _emails = [];
       return;
     }
 
-    final List<EmailMessage> all = [];
-    bool hadAuthError = false;
+    List<EmailMessage> allSyncedEmails = [];
+    bool hasError = false;
+    int accountsWithNoNewMail = 0;
+
     for (final account in activeAccounts) {
       try {
         final synced = await _emailRepository.syncEmails(account);
-        all.addAll(synced);
+        if (synced.isEmpty) {
+          accountsWithNoNewMail++;
+        }
+        allSyncedEmails.addAll(synced);
+      } on MailException {
+        hasError = true;
+        if (mounted) {
+          _showErrorDialog(
+            '授权或连接失败',
+            '账户 ${account.displayName} (${account.email}) 无法同步。请检查授权码是否正确以及网络连接是否正常。',
+          );
+        }
       } catch (e) {
-        hadAuthError = true;
+        hasError = true;
+        if (mounted) {
+          _showErrorDialog(
+            '同步失败',
+            '账户 ${account.displayName} (${account.email}) 发生未知错误: ${e.toString()}',
+          );
+        }
       }
     }
 
-    // 本地再合并排序（降序）
-    all.sort((a, b) => b.receivedDate.compareTo(a.receivedDate));
+    // 刷新邮件列表
+    final localEmails = await _emailRepository.getLocalEmails();
+    final allEmailsMap = {for (var e in localEmails) e.messageId: e};
+    for (var e in allSyncedEmails) {
+      allEmailsMap[e.messageId] = e;
+    }
+    
+    final finalEmails = allEmailsMap.values.toList();
+    finalEmails.sort((a, b) => b.receivedDate.compareTo(a.receivedDate));
+
     if (mounted) {
       setState(() {
-        _emails = all;
+        _emails = finalEmails;
       });
     }
 
-    if (hadAuthError) {
-      _showErrorDialog('账户连接失败', '部分账户授权码不正确或服务器不可用，请在设置中检查。');
-    }
-    if (all.isEmpty) {
-      _showErrorDialog('邮箱内容为空', '未从服务器获取到任何邮件，请确认邮箱内是否有内容或稍后重试。');
+    // 在所有操作完成后，根据最终状态显示提示
+    if (!hasError && finalEmails.isEmpty) {
+        _showErrorDialog(
+            '邮箱为空',
+            '未从任何账户获取到邮件。请检查邮箱内是否有内容，或确认白名单规则是否过于严格。',
+        );
+    } else if (!hasError && accountsWithNoNewMail == activeAccounts.length && allSyncedEmails.isEmpty) {
+        // 如果所有账户都同步成功但都没有新邮件
+        if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('所有账户均无新邮件。')),
+            );
+        }
     }
   }
 
-  void _applyCurrentFilter() async {
-    // 直接对内存列表进行筛选
-    List<EmailMessage> list = List.of(_emails);
+  Future<void> _applyCurrentFilter() async {
+    // 从 repository 重新获取数据以应用筛选
+    List<EmailMessage> list;
     final now = DateTime.now();
 
-    if (_selectedTabIndex == 1) {
-      final start = now.subtract(const Duration(days: 1));
-      list = list.where((e) => e.receivedDate.isAfter(start)).toList();
-    } else if (_selectedTabIndex == 2) {
-      final start = now.subtract(const Duration(days: 7));
-      list = list.where((e) => e.receivedDate.isAfter(start)).toList();
+    switch (_selectedTabIndex) {
+      case 1: // 今日
+        final start = DateTime(now.year, now.month, now.day);
+        list = await _emailRepository.getLocalEmails(startDate: start);
+        break;
+      case 2: // 本周
+        final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
+        final start = DateTime(startOfWeek.year, startOfWeek.month, startOfWeek.day);
+        list = await _emailRepository.getLocalEmails(startDate: start);
+        break;
+      default: // 全部
+        list = await _emailRepository.getLocalEmails();
+        break;
     }
-
+    
     list.sort((a, b) => b.receivedDate.compareTo(a.receivedDate));
+
     if (mounted) {
       setState(() {
         _emails = list;
@@ -245,7 +294,7 @@ class _HomePageState extends ConsumerState<HomePage> {
       );
     }
 
-    if (_emails.isEmpty) {
+    if (_emails.isEmpty && !_isLoading) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -265,7 +314,7 @@ class _HomePageState extends ConsumerState<HomePage> {
             ),
             const SizedBox(height: 8),
             Text(
-              '下拉刷新或检查网络连接',
+              '下拉刷新或检查账户设置',
               style: TextStyle(
                 fontSize: 14,
                 color: AppTheme.textSecondaryColor,
@@ -277,9 +326,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     }
 
     return RefreshIndicator(
-      onRefresh: () async {
-        await _refreshEmails();
-      },
+      onRefresh: _refreshEmails,
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
         itemCount: _emails.length,
@@ -451,13 +498,9 @@ class _HomePageState extends ConsumerState<HomePage> {
 
     try {
       await _syncAllActiveAccounts();
-      _applyCurrentFilter();
+      await _applyCurrentFilter();
 
       if (mounted) {
-        setState(() {
-          _isRefreshing = false;
-        });
-
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('邮件已刷新'),
@@ -467,11 +510,13 @@ class _HomePageState extends ConsumerState<HomePage> {
       }
     } catch (e) {
       if (mounted) {
+        _showErrorDialog('刷新失败', e.toString());
+      }
+    } finally {
+      if (mounted) {
         setState(() {
           _isRefreshing = false;
         });
-
-        _showErrorDialog('刷新失败', e.toString());
       }
     }
   }
@@ -493,14 +538,42 @@ class _HomePageState extends ConsumerState<HomePage> {
     }
   }
 
-  void _openEmailReader(EmailMessage email) {
-    Navigator.push(
+  void _openEmailReader(EmailMessage email) async {
+    // 标记为已读
+    if (!email.isRead) {
+      final updatedEmail = email.copyWith(isRead: true);
+      await _emailRepository.updateEmail(updatedEmail);
+      if (mounted) {
+        setState(() {
+          final index = _emails.indexWhere((e) => e.messageId == email.messageId);
+          if (index != -1) {
+            _emails[index] = updatedEmail;
+          }
+        });
+      }
+    }
+
+    await Navigator.push(
       context,
-      AnimationUtils.createPageRoute(
-        page: EmailReaderPage(email: email),
-        type: PageTransitionType.slideFromRight,
+      MaterialPageRoute(
+        builder: (context) => EmailReaderPage(email: email),
       ),
     );
+    
+    // 从阅读器返回后，可能需要刷新状态（例如收藏、笔记）
+    _refreshSingleEmail(email.messageId);
+  }
+  
+  Future<void> _refreshSingleEmail(String messageId) async {
+    final updatedEmail = await _emailRepository.getEmailContent(messageId);
+    if (updatedEmail != null && mounted) {
+      setState(() {
+        final index = _emails.indexWhere((e) => e.messageId == messageId);
+        if (index != -1) {
+          _emails[index] = updatedEmail;
+        }
+      });
+    }
   }
 
   Future<void> _toggleStar(EmailMessage email) async {
@@ -509,16 +582,18 @@ class _HomePageState extends ConsumerState<HomePage> {
         email.messageId,
         isStarred: !email.isStarred,
       );
-      await _loadEmails();
+      await _refreshSingleEmail(email.messageId);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            email.isStarred ? '已取消收藏' : '已收藏邮件',
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              !email.isStarred ? '已收藏邮件' : '已取消收藏',
+            ),
+            duration: const Duration(seconds: 1),
           ),
-          duration: const Duration(seconds: 1),
-        ),
-      );
+        );
+      }
     } catch (e) {
       _showErrorSnack('操作失败: $e');
     }
@@ -555,7 +630,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                     emailData.messageId,
                     isRead: !emailData.isRead,
                   );
-                  await _loadEmails();
+                  await _refreshSingleEmail(emailData.messageId);
                 } catch (e) {
                   _showErrorSnack('操作失败: $e');
                 }
@@ -617,7 +692,7 @@ class _HomePageState extends ConsumerState<HomePage> {
       final content = emailData.contentText ?? emailData.contentHtml ?? '';
       final summary = await aiService.generateSummary(emailData.subject, content);
       await _emailRepository.updateEmailStatus(emailData.messageId, aiSummary: summary);
-      await _loadEmails();
+      await _refreshSingleEmail(emailData.messageId);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -636,27 +711,23 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   void _shareEmail(EmailMessage emailData) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('分享功能开发中...')),
-    );
+    Share.share(
+        '主题: ${emailData.subject}\n发件人: ${emailData.senderEmail}\n\n${emailData.contentText ?? ''}');
   }
 
   Future<void> _deleteEmail(EmailMessage emailData) async {
     try {
       await _emailRepository.deleteEmail(emailData.messageId);
-      await _loadEmails();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('已删除邮件: ${emailData.subject}'),
-          action: SnackBarAction(
-            label: '撤销',
-            onPressed: () {
-              // TODO: 撤销删除操作
-            },
+      if (mounted) {
+        setState(() {
+          _emails.removeWhere((e) => e.messageId == emailData.messageId);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('已删除邮件: ${emailData.subject}'),
           ),
-        ),
-      );
+        );
+      }
     } catch (e) {
       _showErrorSnack('删除失败: $e');
     }
@@ -693,7 +764,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                   ),
                 ),
                 Text(
-                  'v0.2.1',
+                  'v0.3.0',
                   style: TextStyle(
                     color: Colors.white70,
                     fontSize: 14,
@@ -739,14 +810,16 @@ class _HomePageState extends ConsumerState<HomePage> {
           ListTile(
             leading: const Icon(Icons.settings),
             title: const Text('设置'),
-            onTap: () {
+            onTap: () async {
               Navigator.pop(context);
-              Navigator.push(
+              await Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (context) => const SettingsPage(),
                 ),
               );
+              // 从设置页返回后刷新
+              _refreshEmails();
             },
           ),
           ListTile(
@@ -779,7 +852,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     showAboutDialog(
       context: context,
       applicationName: '新闻邮件阅读器',
-      applicationVersion: '0.2.1',
+      applicationVersion: '0.3.0',
       applicationIcon: Container(
         width: 64,
         height: 64,
@@ -807,10 +880,11 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   void _showErrorSnack(String msg) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg)),
+      SnackBar(content: Text(msg), backgroundColor: Colors.red),
     );
-    }
+  }
 
   void _showErrorDialog(String title, String message) {
     if (!mounted) return;
@@ -818,11 +892,25 @@ class _HomePageState extends ConsumerState<HomePage> {
       context: context,
       builder: (_) => AlertDialog(
         title: Text(title),
-        content: Text(message),
+        content: SingleChildScrollView(child: Text(message)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('确定')),
         ],
       ),
     );
+  }
+
+  Future<void> _deleteExampleEmails() async {
+    try {
+      final localEmails = await _emailRepository.getLocalEmails();
+      final exampleEmails = localEmails.where((e) => e.senderEmail.endsWith('@example.com')).toList();
+
+      for (final email in exampleEmails) {
+        await _emailRepository.deleteEmail(email.messageId);
+      }
+    } catch (e) {
+      // Silently fail, as this is a cleanup task
+      debugPrint('Failed to delete example emails: $e');
+    }
   }
 }

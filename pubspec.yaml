@@ -1,7 +1,7 @@
 name: news_email_reader
 description: A geek-oriented news email reader app with AI summarization.
 publish_to: 'none'
-version: 0.2.1+1
+version: 0.3.2+2
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -35,7 +35,6 @@ dependencies:
   
   # HTML & Content Rendering
   html: ^0.15.4
-  flutter_html: ^3.0.0-beta.2
   
   # Image Handling
   cached_network_image: ^3.3.0
@@ -53,6 +52,10 @@ dependencies:
   
   # Encryption
   crypto: ^3.0.3
+
+  # Platform-specific WebViews
+  webview_flutter: ^4.7.0
+  webview_windows: ^0.4.0
 
 dev_dependencies:
   flutter_test:

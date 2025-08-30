@@ -2,6 +2,15 @@ import '../database/database_helper.dart';
 import '../models/email_account.dart';
 import '../services/email_service.dart';
 
+/// 当尝试添加或更新一个已存在的账户时抛出此异常
+class DuplicateAccountException implements Exception {
+  final String message;
+  DuplicateAccountException(this.message);
+
+  @override
+  String toString() => message;
+}
+
 class AccountRepository {
   static final AccountRepository _instance = AccountRepository._internal();
   factory AccountRepository() => _instance;
@@ -9,6 +18,31 @@ class AccountRepository {
 
   final DatabaseHelper _databaseHelper = DatabaseHelper();
   final EmailService _emailService = EmailService();
+
+  /// 检查具有相同唯一标识（邮箱、服务器、协议）的账户是否已存在
+  Future<bool> accountExists({
+    required String email,
+    required String serverHost,
+    required String protocol,
+    int? excludeId, // 在更新时排除当前账户ID
+  }) async {
+    final allAccounts = await getAllAccounts();
+    final lowerEmail = email.toLowerCase();
+    final lowerHost = serverHost.toLowerCase();
+    final upperProtocol = protocol.toUpperCase();
+
+    for (final account in allAccounts) {
+      if (excludeId != null && account.id == excludeId) {
+        continue; // 这是同一个账户，跳过
+      }
+      if (account.email.toLowerCase() == lowerEmail &&
+          account.serverHost.toLowerCase() == lowerHost &&
+          account.protocol.toUpperCase() == upperProtocol) {
+        return true; // 发现重复
+      }
+    }
+    return false;
+  }
 
   /// 获取所有邮件账户
   Future<List<EmailAccount>> getAllAccounts() async {
@@ -37,12 +71,33 @@ class AccountRepository {
 
   /// 添加新账户
   Future<int> addAccount(EmailAccount account) async {
+    final duplicated = await accountExists(
+      email: account.email,
+      serverHost: account.serverHost,
+      protocol: account.protocol,
+    );
+    if (duplicated) {
+      throw DuplicateAccountException(
+        '该账户已存在：${account.email} (${account.protocol}@${account.serverHost})。\\n建议：编辑已存在账户、停用后再添加，或删除重复账户。',
+      );
+    }
     final db = await _databaseHelper.database;
     return await db.insert('email_accounts', account.toMap());
   }
 
   /// 更新账户
   Future<int> updateAccount(EmailAccount account) async {
+    final duplicated = await accountExists(
+      email: account.email,
+      serverHost: account.serverHost,
+      protocol: account.protocol,
+      excludeId: account.id,
+    );
+    if (duplicated) {
+      throw DuplicateAccountException(
+        '存在相同邮箱与服务器的账户，无法保存：${account.email} (${account.protocol}@${account.serverHost})。\\n建议：调整显示名称或修改协议/服务器配置，避免重复。',
+      );
+    }
     final db = await _databaseHelper.database;
     return await db.update(
       'email_accounts',
@@ -87,6 +142,7 @@ class AccountRepository {
       }
       return false;
     } catch (e) {
+      // ignore: avoid_print
       print('Error activating account: $e');
       return false;
     }
@@ -145,6 +201,7 @@ class AccountRepository {
       final success = await _emailService.connectToAccount(account);
       results[account.id!] = success;
       if (!success) {
+        // ignore: avoid_print
         print('Failed to connect account: ${account.email}');
       }
     }
@@ -162,7 +219,7 @@ class AccountRepository {
     }
 
     // 邮箱格式验证
-    final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+    final emailRegex = RegExp(r'^[\\w-\\.]+@([\\w-]+\\.)+[\\w-]{2,4}$');
     if (!emailRegex.hasMatch(account.email)) {
       return false;
     }

@@ -9,6 +9,7 @@ import '../../../../core/models/email_message.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/repositories/email_repository.dart';
 import '../../../../core/services/ai_service.dart';
+import '../../../notes/presentation/pages/note_editor_page.dart';
 
 class EmailReaderPage extends StatefulWidget {
   final EmailMessage email;
@@ -133,22 +134,81 @@ class _EmailReaderPageState extends State<EmailReaderPage> {
       );
     }
 
-    if (Platform.isWindows) {
-      return windows_webview.Webview(
-        _windowsController,
-        permissionRequested: (url, permission, isUserInitiated) async {
-          return windows_webview.WebviewPermissionDecision.allow;
-        },
-      );
-    } else {
-      return WebViewWidget(controller: _webViewController);
-    }
+    final webView = Platform.isWindows
+        ? windows_webview.Webview(
+            _windowsController,
+            permissionRequested: (url, permission, isUserInitiated) async {
+              return windows_webview.WebviewPermissionDecision.allow;
+            },
+          )
+        : WebViewWidget(controller: _webViewController);
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            height: MediaQuery.of(context).size.height * 0.6,
+            child: webView,
+          ),
+          if (_currentEmail.notes != null && _currentEmail.notes!.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 24.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.note_alt, color: AppTheme.primaryColor),
+                      const SizedBox(width: 8),
+                      Text(
+                        '我的笔记',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    _currentEmail.notes!,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ],
+              ),
+            ),
+          if (_currentEmail.aiSummary != null && _currentEmail.aiSummary!.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 24.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.auto_awesome, color: AppTheme.secondaryColor),
+                      const SizedBox(width: 8),
+                      Text(
+                        'AI 总结',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    _currentEmail.aiSummary!,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
   void _showEmailOptions() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppTheme.surfaceColor,
+      // The background color will be determined by the theme
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -163,6 +223,22 @@ class _EmailReaderPageState extends State<EmailReaderPage> {
               onTap: () {
                 Navigator.pop(context);
                 _toggleStar();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.note_add),
+              title: const Text('笔记'),
+              onTap: () async {
+                Navigator.pop(context);
+                final result = await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => NoteEditorPage(email: _currentEmail),
+                  ),
+                );
+                if (result == true) {
+                  _refreshEmailState();
+                }
               },
             ),
             ListTile(

@@ -8,6 +8,7 @@ import '../../../../core/utils/animation_utils.dart';
 import '../../../../core/repositories/email_repository.dart';
 import '../../../../core/repositories/account_repository.dart';
 import '../../../../core/services/ai_service.dart';
+import '../../../../core/services/settings_service.dart';
 import '../../../reader/presentation/pages/email_reader_page.dart';
 import '../../../settings/presentation/pages/settings_page.dart';
 import '../../../notes/presentation/pages/notes_page.dart';
@@ -26,9 +27,11 @@ class _HomePageState extends ConsumerState<HomePage> {
   int _selectedTabIndex = 0;
   bool _isLoading = false;
   bool _isRefreshing = false;
+  bool _isFirstLoad = true;
   List<EmailMessage> _emails = [];
   final EmailRepository _emailRepository = EmailRepository();
   final AccountRepository _accountRepository = AccountRepository();
+  final SettingsService _settingsService = SettingsService();
 
   final List<String> _filterTabs = [
     '全部',
@@ -45,16 +48,19 @@ class _HomePageState extends ConsumerState<HomePage> {
   Future<void> _loadEmails() async {
     if (_isLoading) return;
 
-    // First, delete any test emails
-    await _deleteExampleEmails();
-
     setState(() {
       _isLoading = true;
     });
 
     try {
-      await _syncAllActiveAccounts();
-      await _applyCurrentFilter(); // 使用 await
+      if (_isFirstLoad) {
+        final shouldAutoSync = await _settingsService.getAutoSync();
+        if (shouldAutoSync) {
+          await _syncAllActiveAccounts();
+        }
+        _isFirstLoad = false;
+      }
+      await _applyCurrentFilter();
     } catch (e) {
       if (mounted) {
         _showErrorDialog('加载邮件失败', e.toString());
@@ -408,14 +414,28 @@ class _HomePageState extends ConsumerState<HomePage> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                Text(
-                  email.subject,
-                  style: TextStyle(
-                    fontWeight: email.isRead ? FontWeight.normal : FontWeight.w500,
-                    fontSize: 16,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        email.subject,
+                        style: TextStyle(
+                          fontWeight: email.isRead ? FontWeight.normal : FontWeight.w500,
+                          fontSize: 16,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (email.aiSummary != null && email.aiSummary!.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      const Icon(
+                        Icons.auto_awesome,
+                        size: 16,
+                        color: AppTheme.secondaryColor,
+                      ),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -445,32 +465,6 @@ class _HomePageState extends ConsumerState<HomePage> {
                       ),
                     ),
                     const Spacer(),
-                    if (email.aiSummary != null)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppTheme.secondaryColor.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.auto_awesome,
-                              size: 10,
-                              color: AppTheme.secondaryColor,
-                            ),
-                            SizedBox(width: 2),
-                            Text(
-                              'AI总结',
-                              style: TextStyle(
-                                color: AppTheme.secondaryColor,
-                                fontSize: 10,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
                   ],
                 ),
               ],
@@ -898,19 +892,5 @@ class _HomePageState extends ConsumerState<HomePage> {
         ],
       ),
     );
-  }
-
-  Future<void> _deleteExampleEmails() async {
-    try {
-      final localEmails = await _emailRepository.getLocalEmails();
-      final exampleEmails = localEmails.where((e) => e.senderEmail.endsWith('@example.com')).toList();
-
-      for (final email in exampleEmails) {
-        await _emailRepository.deleteEmail(email.messageId);
-      }
-    } catch (e) {
-      // Silently fail, as this is a cleanup task
-      debugPrint('Failed to delete example emails: $e');
-    }
   }
 }

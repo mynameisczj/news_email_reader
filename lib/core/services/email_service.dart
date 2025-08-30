@@ -165,12 +165,12 @@ class EmailService {
     String? html = mime.decodeTextHtmlPart();
     if ((text == null || text.trim().isEmpty) && html != null) {
       // 提供一个简短的纯文本预览
-      final stripped = html.replaceAll(RegExp(r'<[^>]*>'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+      final stripped = html.replaceAll(RegExp(r'<[^>]*>'), ' ').replaceAll(RegExp(r'\\s+'), ' ').trim();
       text = stripped.isNotEmpty ? stripped : null;
     }
 
-    // 生成确定性的 messageId（避免依赖不可用的 decodeMessageId）
-    final String messageId = _deterministicMessageId(
+    // 优先使用邮件头中的 Message-ID，如果不存在，则生成一个确定性的 ID
+    final String messageId = mime.getHeaderValue('Message-ID') ?? _deterministicMessageId(
       account.email,
       senderEmail,
       date,
@@ -201,10 +201,12 @@ class EmailService {
     String subject,
     String seed,
   ) {
+    // 将时间戳舍入到分钟级别，以避免微秒差异
+    final roundedDate = DateTime(date.year, date.month, date.day, date.hour, date.minute);
     final subjectHash = _stableHash(subject);
     final seedHash = _stableHash(seed.toString());
-    final base = 'msg_${accountEmail}_${senderEmail}_${date.millisecondsSinceEpoch}_${subjectHash}_${seedHash}';
-    return base.replaceAll(RegExp(r'[^A-Za-z0-9_\-@.]'), '_');
+    final base = 'msg_${accountEmail}_${senderEmail}_${roundedDate.millisecondsSinceEpoch}_${subjectHash}_${seedHash}';
+    return base.replaceAll(RegExp(r'[^A-Za-z0-9_\\-@.]'), '_');
   }
 
   int _stableHash(String s) {

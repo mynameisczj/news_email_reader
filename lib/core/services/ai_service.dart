@@ -24,8 +24,8 @@ class AIService {
             'Authorization': 'Bearer $_apiKey',
             'Content-Type': 'application/json',
           },
-          sendTimeout: const Duration(seconds: 30),
-          receiveTimeout: const Duration(seconds: 30),
+          sendTimeout: const Duration(seconds: 60),
+          receiveTimeout: const Duration(seconds: 60),
         ),
         data: {
           'model': _model,
@@ -88,8 +88,8 @@ class AIService {
             'Authorization': 'Bearer $_apiKey',
             'Content-Type': 'application/json',
           },
-          sendTimeout: const Duration(seconds: 30),
-          receiveTimeout: const Duration(seconds: 30),
+          sendTimeout: const Duration(seconds: 60),
+          receiveTimeout: const Duration(seconds: 60),
         ),
         data: {
           'model': _model,
@@ -129,8 +129,8 @@ class AIService {
             'Authorization': 'Bearer $_apiKey',
             'Content-Type': 'application/json',
           },
-          sendTimeout: const Duration(seconds: 30),
-          receiveTimeout: const Duration(seconds: 30),
+          sendTimeout: const Duration(seconds: 60),
+          receiveTimeout: const Duration(seconds: 60),
         ),
         data: {
           'model': _model,

@@ -76,15 +76,15 @@ class EmailRepository {
   /// 同步邮件（从服务器获取并筛选）
   Future<List<EmailMessage>> syncEmails(EmailAccount account) async {
     try {
-      // 从邮件服务器获取邮件
-      final serverEmails = await _emailService.fetchRecentEmails();
-      
+      // 从邮件服务器获取邮件（按账户协议与配置）
+      final serverEmails = await _emailService.fetchRecentEmails(account);
+
       // 通过白名单筛选
       final filteredEmails = await _whitelistService.filterEmails(serverEmails);
-      
+
       // 保存到本地存储
       await saveEmails(filteredEmails);
-      
+
       return filteredEmails;
     } catch (e) {
       print('同步邮件失败: $e');

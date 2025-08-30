@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:enough_mail/enough_mail.dart';
 import '../models/email_message.dart';
 import '../models/email_account.dart';
 
@@ -7,184 +8,210 @@ class EmailService {
   factory EmailService() => _instance;
   EmailService._internal();
 
-  bool _isConnected = false;
-  EmailAccount? _currentAccount;
-
+  // 连接测试：尝试登录对应协议，成功即返回 true
   Future<bool> connectToAccount(EmailAccount account) async {
+    final protocol = account.protocol.toUpperCase();
     try {
-      // 模拟连接过程
-      await Future.delayed(const Duration(seconds: 1));
-      
-      _currentAccount = account;
-      _isConnected = true;
-      print('Successfully connected to email account: ${account.email}');
-      return true;
-    } catch (e) {
-      print('Failed to connect to email account: $e');
-      _isConnected = false;
-      return false;
-    }
-  }
-
-  Future<void> disconnect() async {
-    if (_isConnected) {
-      try {
-        await Future.delayed(const Duration(milliseconds: 500));
-        _isConnected = false;
-        _currentAccount = null;
-        print('Disconnected from email account');
-      } catch (e) {
-        print('Error disconnecting: $e');
-      }
-    }
-  }
-
-  Future<List<EmailMessage>> fetchRecentEmails({int count = 50}) async {
-    if (!_isConnected || _currentAccount == null) {
-      throw Exception('Not connected to email account');
-    }
-
-    try {
-      // 模拟获取邮件
-      await Future.delayed(const Duration(seconds: 2));
-      
-      return _generateMockEmails(count);
-    } catch (e) {
-      print('Error fetching recent emails: $e');
-      return [];
-    }
-  }
-
-  Future<List<EmailMessage>> searchEmails({
-    String? fromEmail,
-    String? subject,
-    DateTime? since,
-    DateTime? before,
-  }) async {
-    if (!_isConnected || _currentAccount == null) {
-      throw Exception('Not connected to email account');
-    }
-
-    try {
-      await Future.delayed(const Duration(seconds: 1));
-      
-      // 模拟搜索结果
-      final allEmails = _generateMockEmails(20);
-      return allEmails.where((email) {
-        if (fromEmail != null && !email.senderEmail.contains(fromEmail)) {
-          return false;
-        }
-        if (subject != null && !email.subject.toLowerCase().contains(subject.toLowerCase())) {
-          return false;
-        }
-        if (since != null && email.receivedDate.isBefore(since)) {
-          return false;
-        }
-        if (before != null && email.receivedDate.isAfter(before)) {
-          return false;
-        }
+      if (protocol == 'IMAP') {
+        final client = ImapClient(isLogEnabled: false);
+        await client.connectToServer(account.serverHost, account.serverPort, isSecure: account.useSsl);
+        await client.login(account.email, account.password);
+        await client.logout();
+        await client.disconnect();
         return true;
-      }).toList();
+      } else if (protocol == 'POP3') {
+        final client = PopClient(isLogEnabled: false);
+        await client.connectToServer(account.serverHost, account.serverPort, isSecure: account.useSsl);
+        await client.login(account.email, account.password);
+        await client.quit();
+        await client.disconnect();
+        return true;
+      } else {
+        // 仅 IMAP/POP3 用于读取
+        return false;
+      }
+    } on MailException catch (e) {
+      // 授权失败/网络错误
+      // ignore: avoid_print
+      print('connectToAccount failed: $e');
+      return false;
     } catch (e) {
-      print('Error searching emails: $e');
-      return [];
-    }
-  }
-
-  Future<List<EmailMessage>> fetchEmailsByKeywords(List<String> keywords) async {
-    if (!_isConnected || _currentAccount == null) {
-      throw Exception('Not connected to email account');
-    }
-
-    try {
-      await Future.delayed(const Duration(seconds: 1));
-      
-      final allEmails = _generateMockEmails(30);
-      return allEmails.where((email) {
-        final content = '${email.subject} ${email.previewContent}'.toLowerCase();
-        return keywords.any((keyword) => content.contains(keyword.toLowerCase()));
-      }).toList();
-    } catch (e) {
-      print('Error fetching emails by keywords: $e');
-      return [];
-    }
-  }
-
-  Future<bool> connectToPop3Account(EmailAccount account) async {
-    try {
-      await Future.delayed(const Duration(seconds: 1));
-      
-      _currentAccount = account;
-      _isConnected = true;
-      print('Successfully connected to POP3 account: ${account.email}');
-      return true;
-    } catch (e) {
-      print('Failed to connect to POP3 account: $e');
-      _isConnected = false;
+      // ignore: avoid_print
+      print('connectToAccount error: $e');
       return false;
     }
   }
 
-  List<EmailMessage> _generateMockEmails(int count) {
-    final emails = <EmailMessage>[];
-    final senders = [
-      'GitHub <noreply@github.com>',
-      'Stack Overflow <noreply@stackoverflow.com>',
-      'Medium <noreply@medium.com>',
-      'Dev.to <noreply@dev.to>',
-      'Hacker News <noreply@hackernews.com>',
-      'TechCrunch <newsletter@techcrunch.com>',
-      'Ars Technica <newsletter@arstechnica.com>',
-      'The Verge <newsletter@theverge.com>',
-    ];
+  // 对外保留空实现，实际每次抓取走短连接
+  Future<void> disconnect() async {}
 
-    final subjects = [
-      '[GitHub] New release available for flutter/flutter',
-      'Weekly digest: Top questions this week',
-      'New story published: Understanding Flutter State Management',
-      'DEV Community Digest: This week\'s top posts',
-      'Ask HN: What are you working on?',
-      'Breaking: Apple announces new MacBook Pro',
-      'Review: The latest in quantum computing research',
-      'This Week in Tech: AI developments',
-    ];
-
-    final contents = [
-      'A new version of Flutter has been released with improved performance and new features...',
-      'Here are the most popular questions from this week on Stack Overflow...',
-      'In this comprehensive guide, we explore the different state management solutions...',
-      'Check out these amazing posts from the DEV community this week...',
-      'Share what you\'re currently working on and get feedback from the community...',
-      'Apple has just announced their latest MacBook Pro with the new M3 chip...',
-      'Researchers have made significant breakthroughs in quantum computing...',
-      'This week has been exciting for AI development with several major announcements...',
-    ];
-
-    for (int i = 0; i < count; i++) {
-      final senderInfo = senders[i % senders.length];
-      final senderParts = senderInfo.split(' <');
-      final senderName = senderParts[0];
-      final senderEmail = senderParts[1].replaceAll('>', '');
-
-      emails.add(EmailMessage(
-        accountId: 1,
-        messageId: 'mock_${i + 1}',
-        subject: subjects[i % subjects.length],
-        senderEmail: senderEmail,
-        senderName: senderName,
-        recipientEmail: _currentAccount?.email ?? 'user@example.com',
-        contentText: contents[i % contents.length],
-        contentHtml: '<p>${contents[i % contents.length]}</p>',
-        receivedDate: DateTime.now().subtract(Duration(hours: i)),
-        isRead: i % 3 == 0,
-        isStarred: i % 5 == 0,
-        createdAt: DateTime.now().subtract(Duration(hours: i)),
-      ));
+  // 抓取最近邮件（使用账户协议），解析主题/发件人/时间与文本/HTML内容
+  Future<List<EmailMessage>> fetchRecentEmails(
+    EmailAccount account, {
+    int count = 50,
+  }) async {
+    final protocol = account.protocol.toUpperCase();
+    if (protocol == 'IMAP') {
+      return _fetchImapRecent(account, count: count);
+    } else if (protocol == 'POP3') {
+      return _fetchPop3Recent(account, count: count);
+    } else {
+      throw UnsupportedError('仅支持 IMAP/POP3 读取邮件');
     }
-
-    return emails;
   }
 
-  bool get isConnected => _isConnected;
-  EmailAccount? get currentAccount => _currentAccount;
+  // 使用 enough_mail 的便捷方法获取最近邮件
+  Future<List<EmailMessage>> _fetchImapRecent(EmailAccount account, {int count = 50}) async {
+    final client = ImapClient(isLogEnabled: false);
+    try {
+      await client.connectToServer(account.serverHost, account.serverPort, isSecure: account.useSsl);
+      await client.login(account.email, account.password);
+      await client.selectInbox();
+
+      // 使用便捷方法抓取最近邮件（返回 FetchImapResult，其中包含 messages）
+      final fetch = await client.fetchRecentMessages(messageCount: count);
+      final List<MimeMessage> messages = fetch.messages;
+
+      final List<EmailMessage> result = [];
+      for (final mime in messages) {
+        try {
+          result.add(_mimeToEmailMessage(
+            mime,
+            account,
+            messageIdFallback: 'imap_${DateTime.now().millisecondsSinceEpoch}',
+          ));
+        } catch (e) {
+          // 单封失败不影响整体
+          // ignore: avoid_print
+          print('imap convert message error: $e');
+        }
+      }
+      return result;
+    } on MailException catch (e) {
+      // ignore: avoid_print
+      print('IMAP fetch error: $e');
+      rethrow;
+    } finally {
+      try {
+        if (client.isLoggedIn) {
+          await client.logout();
+        }
+      } catch (_) {}
+      try {
+        await client.disconnect();
+      } catch (_) {}
+    }
+  }
+
+  Future<List<EmailMessage>> _fetchPop3Recent(EmailAccount account, {int count = 50}) async {
+    final client = PopClient(isLogEnabled: false);
+    try {
+      await client.connectToServer(account.serverHost, account.serverPort, isSecure: account.useSsl);
+      await client.login(account.email, account.password);
+
+      // 获取服务器邮件总数，POP3 按索引 1..N
+      final status = await client.status();
+      final total = status?.numberOfMessages ?? 0;
+      if (total == 0) {
+        return <EmailMessage>[];
+      }
+
+      final fetchCount = total < count ? total : count;
+      final List<EmailMessage> result = [];
+      for (int i = total; i > total - fetchCount; i--) {
+        try {
+          final mime = await client.retrieve(i);
+          if (mime != null) {
+            // POP3 无 UID，构造一个确定性的 fallback
+            result.add(_mimeToEmailMessage(
+              mime,
+              account,
+              messageIdFallback: 'pop3_${account.email}_$i',
+            ));
+          }
+        } catch (e) {
+          // ignore: avoid_print
+          print('POP3 retrieve index=$i error: $e');
+        }
+      }
+      return result;
+    } on MailException catch (e) {
+      // ignore: avoid_print
+      print('POP3 fetch error: $e');
+      rethrow;
+    } finally {
+      try {
+        await client.quit();
+      } catch (_) {}
+      try {
+        await client.disconnect();
+      } catch (_) {}
+    }
+  }
+
+  EmailMessage _mimeToEmailMessage(
+    MimeMessage mime,
+    EmailAccount account, {
+    required String messageIdFallback,
+  }) {
+    final subject = mime.decodeSubject() ?? '(无主题)';
+    final from = mime.from?.isNotEmpty == true ? mime.from!.first : null;
+    final senderName = from?.personalName;
+    final senderEmail = from?.email ?? 'unknown@unknown';
+    final date = mime.decodeDate() ?? DateTime.now();
+
+    // 内容优先取 text/plain，再取 text/html
+    String? text = mime.decodeTextPlainPart();
+    String? html = mime.decodeTextHtmlPart();
+    if ((text == null || text.trim().isEmpty) && html != null) {
+      // 提供一个简短的纯文本预览
+      final stripped = html.replaceAll(RegExp(r'<[^>]*>'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+      text = stripped.isNotEmpty ? stripped : null;
+    }
+
+    // 生成确定性的 messageId（避免依赖不可用的 decodeMessageId）
+    final String messageId = _deterministicMessageId(
+      account.email,
+      senderEmail,
+      date,
+      subject,
+      messageIdFallback,
+    );
+
+    return EmailMessage(
+      accountId: account.id ?? 0,
+      messageId: messageId,
+      subject: subject,
+      senderName: senderName,
+      senderEmail: senderEmail,
+      recipientEmail: account.email,
+      contentText: text,
+      contentHtml: html,
+      receivedDate: date,
+      isRead: false,
+      isStarred: false,
+      createdAt: DateTime.now(),
+    );
+  }
+
+  String _deterministicMessageId(
+    String accountEmail,
+    String senderEmail,
+    DateTime date,
+    String subject,
+    String seed,
+  ) {
+    final subjectHash = _stableHash(subject);
+    final seedHash = _stableHash(seed.toString());
+    final base = 'msg_${accountEmail}_${senderEmail}_${date.millisecondsSinceEpoch}_${subjectHash}_${seedHash}';
+    return base.replaceAll(RegExp(r'[^A-Za-z0-9_\-@.]'), '_');
+  }
+
+  int _stableHash(String s) {
+    var h = 0;
+    for (final cu in s.codeUnits) {
+      h = (h * 31 + cu) & 0x7fffffff;
+    }
+    return h;
+  }
 }

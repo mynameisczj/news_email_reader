@@ -78,7 +78,6 @@ class _EmailReaderPageState extends ConsumerState<EmailReaderPage> {
         ),
         IconButton(
           icon: const Icon(Icons.more_vert),
-          tooltip: '更多',
           onPressed: _showMoreMenuBottomSheet,
         ),
       ],

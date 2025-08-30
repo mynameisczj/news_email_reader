@@ -5,9 +5,20 @@ import 'core/theme/app_theme.dart';
 import 'core/services/storage_service.dart';
 import 'core/providers/theme_provider.dart';
 import 'features/home/presentation/pages/home_page.dart';
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:sqflite/sqflite.dart' as sqflite;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final isDesktop = !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.windows ||
+       defaultTargetPlatform == TargetPlatform.linux ||
+       defaultTargetPlatform == TargetPlatform.macOS);
+  if (isDesktop) {
+    sqfliteFfiInit();
+    sqflite.databaseFactory = databaseFactoryFfi;
+  }
   
   // Initialize Hive
   await Hive.initFlutter();

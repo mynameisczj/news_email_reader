@@ -16,12 +16,15 @@ dependencies:
   flutter_riverpod: ^2.4.9
   
   # Local Storage
-  sqflite: ^2.3.0
-  sqflite_common_ffi: ^2.3.0
+  # sqflite: ^2.3.0  # removed: use StorageService(JSON) instead
+  # sqflite_common_ffi: ^2.3.0  # removed
   shared_preferences: ^2.2.2
   hive: ^2.2.3
   hive_flutter: ^1.1.0
   flutter_secure_storage: ^9.0.0
+  sqflite: ^2.3.0
+  sqflite_common_ffi: ^2.3.2
+
   
   # Network & HTTP
   dio: ^5.4.0

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/models/email_message.dart';
-import '../../../../core/services/mock_email_service.dart';
+import '../../../../core/repositories/email_repository.dart';
 import '../../../reader/presentation/pages/email_reader_page.dart';
 
 class SearchPage extends ConsumerStatefulWidget {
@@ -14,7 +14,7 @@ class SearchPage extends ConsumerStatefulWidget {
 
 class _SearchPageState extends ConsumerState<SearchPage> {
   final TextEditingController _searchController = TextEditingController();
-  final MockEmailService _emailService = MockEmailService();
+  final EmailRepository _emailRepository = EmailRepository();
   List<EmailMessage> _searchResults = [];
   bool _isSearching = false;
   String _searchQuery = '';
@@ -40,16 +40,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     });
 
     try {
-      // 模拟搜索延迟
-      await Future.delayed(const Duration(milliseconds: 500));
-      
-      final allEmails = await _emailService.getEmails();
-      final results = allEmails.where((email) {
-        return email.subject.toLowerCase().contains(query.toLowerCase()) ||
-               email.displaySender.toLowerCase().contains(query.toLowerCase()) ||
-               email.previewContent.toLowerCase().contains(query.toLowerCase());
-      }).toList();
-
+      final results = await _emailRepository.searchEmails(query, limit: 100);
       setState(() {
         _searchResults = results;
         _isSearching = false;
@@ -194,7 +185,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         leading: CircleAvatar(
           backgroundColor: email.isRead ? AppTheme.textSecondaryColor : AppTheme.primaryColor,
           child: Text(
-            email.displaySender.substring(0, 1).toUpperCase(),
+            (email.senderName?.isNotEmpty == true ? email.senderName! : email.senderEmail)[0].toUpperCase(),
             style: const TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.bold,
@@ -213,7 +204,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              email.displaySender,
+              email.senderName ?? email.senderEmail,
               style: const TextStyle(
                 color: AppTheme.textSecondaryColor,
                 fontSize: 12,
@@ -221,7 +212,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             ),
             const SizedBox(height: 4),
             Text(
-              email.previewContent,
+              (email.contentText ?? '无内容'),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 13),

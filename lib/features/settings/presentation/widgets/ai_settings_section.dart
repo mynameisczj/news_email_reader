@@ -34,7 +34,7 @@ class _AISettingsSectionState extends ConsumerState<AISettingsSection> {
   Future<void> _loadSwitchSettings() async {
     final autoSummary = await _settingsService.getAutoSummary();
     final batchSummary = await _settingsService.getBatchSummary();
-    
+    if (!mounted) return;
     setState(() {
       _autoSummary = autoSummary;
       _batchSummary = batchSummary;
@@ -43,6 +43,7 @@ class _AISettingsSectionState extends ConsumerState<AISettingsSection> {
 
   Future<void> _loadSettings() async {
     // TODO: 从本地存储加载设置
+    if (!mounted) return;
     setState(() {
       _apiKey = 'sk-W0rpStc95T7JVYVwDYc29IyirjtpPPby6SozFMQr17m8KWeo';
     });
@@ -321,12 +322,14 @@ class _AISettingsSectionState extends ConsumerState<AISettingsSection> {
   }
 
   Future<void> _testConnection() async {
+    if (!mounted) return;
     setState(() {
       _isTestingConnection = true;
     });
 
     try {
       final success = await _aiService.testConnection();
+      if (!mounted) return;
       setState(() {
         _connectionStatus = success;
         _isTestingConnection = false;
@@ -341,6 +344,7 @@ class _AISettingsSectionState extends ConsumerState<AISettingsSection> {
         );
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _connectionStatus = false;
         _isTestingConnection = false;

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/email_message.dart';
@@ -70,9 +71,48 @@ class StorageService {
       
       return jsonList.map((json) => EmailMessage.fromJson(json)).toList();
     } catch (e) {
-      print('Error loading emails: $e');
+      debugPrint('Error loading emails: $e');
       return [];
     }
+  }
+  
+  // 别名方法，保持兼容性
+  Future<List<EmailMessage>> getEmails() async {
+    return await getAllEmails();
+  }
+  
+  // 保存邮件列表（批量保存，替换所有邮件）
+  Future<void> saveEmails(List<EmailMessage> emails) async {
+    await _saveEmailsToFile(emails);
+  }
+  
+  // 批量保存邮件（逐个保存，用于合并模式）
+  Future<void> saveEmailsBatch(List<EmailMessage> emails) async {
+    for (final email in emails) {
+      await saveEmail(email);
+    }
+  }
+  
+  // 清除邮件缓存
+  Future<void> clearEmailCache() async {
+    try {
+      final file = File('${_appDir.path}/emails.json');
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (e) {
+      debugPrint('Error clearing email cache: $e');
+    }
+  }
+  
+  // 获取和设置最后同步时间
+  Future<DateTime?> getLastSyncTime() async {
+    final timestamp = _prefs.getInt('last_sync_time');
+    return timestamp != null ? DateTime.fromMillisecondsSinceEpoch(timestamp) : null;
+  }
+  
+  Future<void> setLastSyncTime(DateTime time) async {
+    await _prefs.setInt('last_sync_time', time.millisecondsSinceEpoch);
   }
   
   Future<EmailMessage?> getEmailById(String id) async {
@@ -106,7 +146,7 @@ class StorageService {
       final jsonList = emails.map((email) => email.toJson()).toList();
       await file.writeAsString(json.encode(jsonList));
     } catch (e) {
-      print('Error saving emails: $e');
+      debugPrint('Error saving emails: $e');
       throw Exception('Failed to save emails: $e');
     }
   }
@@ -156,20 +196,37 @@ class StorageService {
       }
       await _saveEmailsToFile(preserved);
     } catch (e) {
-      print('Error clearing data: $e');
+      debugPrint('Error clearing data: $e');
     }
   }
 
-  // 仅清正文/图片等缓存（保留元数据与用户操作），供设置页调用的显式方法
+  // 智能清理缓存（删除普通邮件，保留收藏和有笔记的邮件）
   Future<void> clearCachePreservingUserData() async {
     try {
-      final emails = await getAllEmails();
-      final trimmed = emails
-          .map((e) => e.copyWith(contentHtml: null, contentText: null, isCached: false))
+      final allEmails = await getAllEmails();
+      
+      // 筛选出需要保留的邮件（收藏或有笔记）
+      final emailsToKeep = allEmails.where((email) => 
+        email.isStarred || (email.notes != null && email.notes!.isNotEmpty)
+      ).toList();
+      
+      // 对于需要保留的邮件，清除其正文内容但保留元数据和用户操作
+      final trimmedEmails = emailsToKeep
+          .map((e) => e.copyWith(
+            contentHtml: null, 
+            contentText: null, 
+            isCached: false
+          ))
           .toList();
-      await _saveEmailsToFile(trimmed);
+      
+      // 保存处理后的邮件列表
+      await _saveEmailsToFile(trimmedEmails);
+      
+      final deletedCount = allEmails.length - emailsToKeep.length;
+      debugPrint('智能缓存清理完成：删除了 $deletedCount 封普通邮件，保留了 ${emailsToKeep.length} 封重要邮件的元数据');
     } catch (e) {
-      print('Error trimming email cache: $e');
+      debugPrint('清理缓存失败: $e');
+      throw Exception('清理缓存失败: $e');
     }
   }
   

@@ -1,11 +1,23 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 class AIService {
   static final AIService _instance = AIService._internal();
   factory AIService() => _instance;
-  AIService._internal();
+  AIService._internal() {
+    _initializeDio();
+  }
 
-  final Dio _dio = Dio();
+  void _initializeDio() {
+    _dio = Dio();
+    
+    // 配置超时时间 - AI总结需要更长时间
+    _dio.options.connectTimeout = const Duration(seconds: 60);
+    _dio.options.receiveTimeout = const Duration(minutes: 5); // 5分钟接收超时
+    _dio.options.sendTimeout = const Duration(seconds: 60);
+  }
+
+  late final Dio _dio;
   
   // API配置
   static const String _baseUrl = 'https://api.suanli.cn/v1';
@@ -35,24 +47,34 @@ class AIService {
               'content': prompt,
             }
           ],
-          'max_tokens': 500,
+          'max_tokens': 4000,
           'temperature': 0.7,
+          'stream': false,
         },
       );
 
       if (response.statusCode == 200) {
         final data = response.data;
-        String summary = data['choices'][0]['message']['content'];
-        
-        // 去掉思考标签内的内容
-        summary = _removeThinkingTags(summary);
-        
-        return summary.trim();
+        if (data['choices'] != null && data['choices'].isNotEmpty) {
+          String summary = data['choices'][0]['message']['content'] ?? '';
+          
+          // 去掉思考标签内的内容
+          summary = _removeThinkingTags(summary);
+          
+          // 确保返回完整内容
+          if (summary.isEmpty) {
+            throw Exception('AI返回了空的总结内容');
+          }
+          
+          return summary.trim();
+        } else {
+          throw Exception('AI响应格式错误：缺少choices字段');
+        }
       } else {
         throw Exception('API请求失败: ${response.statusCode}');
       }
     } catch (e) {
-      print('AI总结生成失败: $e');
+      debugPrint('AI总结生成失败: $e');
       throw Exception('生成总结失败，请检查网络连接');
     }
   }
@@ -99,8 +121,9 @@ class AIService {
               'content': prompt,
             }
           ],
-          'max_tokens': 800,
+          'max_tokens': 4000,
           'temperature': 0.7,
+          'stream': false,
         },
       );
 
@@ -112,7 +135,7 @@ class AIService {
         throw Exception('API请求失败: ${response.statusCode}');
       }
     } catch (e) {
-      print('每日汇总生成失败: $e');
+      debugPrint('每日汇总生成失败: $e');
       throw Exception('生成每日汇总失败，请检查网络连接');
     }
   }
@@ -140,8 +163,9 @@ class AIService {
               'content': prompt,
             }
           ],
-          'max_tokens': 1000,
+          'max_tokens': 4000,
           'temperature': 0.3,
+          'stream': false,
         },
       );
 
@@ -153,7 +177,7 @@ class AIService {
         throw Exception('API请求失败: ${response.statusCode}');
       }
     } catch (e) {
-      print('翻译失败: $e');
+      debugPrint('翻译失败: $e');
       throw Exception('翻译失败，请检查网络连接');
     }
   }
@@ -259,7 +283,7 @@ $content
 
       return response.statusCode == 200;
     } catch (e) {
-      print('API连接测试失败: $e');
+      debugPrint('API连接测试失败: $e');
       return false;
     }
   }

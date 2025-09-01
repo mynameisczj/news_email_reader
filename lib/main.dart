@@ -1,16 +1,39 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:logging/logging.dart';
 import 'core/theme/app_theme.dart';
 import 'core/services/storage_service.dart';
 import 'core/providers/theme_provider.dart';
 import 'features/home/presentation/pages/home_page.dart';
-import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform, kDebugMode, debugPrint;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:sqflite/sqflite.dart' as sqflite;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // 禁用enough_mail库的调试输出
+  if (kDebugMode) {
+    // 启用分层日志记录
+    hierarchicalLoggingEnabled = true;
+    // 设置所有日志级别为SEVERE，只显示严重错误
+    Logger.root.level = Level.SEVERE;
+    // 禁用特定库的日志输出
+    Logger('enough_mail').level = Level.OFF;
+    Logger('imap').level = Level.OFF;
+    Logger('pop3').level = Level.OFF;
+    Logger('smtp').level = Level.OFF;
+    Logger('mime').level = Level.OFF;
+    Logger('html').level = Level.OFF;
+    
+    Logger.root.onRecord.listen((record) {
+      // 只输出严重错误
+      if (record.level >= Level.SEVERE) {
+        debugPrint('${record.level.name}: ${record.message}');
+      }
+    });
+  }
   final isDesktop = !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.windows ||
        defaultTargetPlatform == TargetPlatform.linux ||

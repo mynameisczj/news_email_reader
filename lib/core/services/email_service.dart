@@ -1,12 +1,22 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:enough_mail/enough_mail.dart';
+import 'package:logging/logging.dart';
 import '../models/email_message.dart';
 import '../models/email_account.dart';
 
 class EmailService {
   static final EmailService _instance = EmailService._internal();
   factory EmailService() => _instance;
-  EmailService._internal();
+  EmailService._internal() {
+    // 禁用enough_mail库的详细日志输出
+    if (kDebugMode) {
+      Logger('enough_mail').level = Level.WARNING;
+      Logger('imap').level = Level.WARNING;
+      Logger('pop3').level = Level.WARNING;
+      Logger('smtp').level = Level.WARNING;
+    }
+  }
 
   // 连接测试：尝试登录对应协议，成功即返回 true
   Future<bool> connectToAccount(EmailAccount account) async {
@@ -33,11 +43,11 @@ class EmailService {
     } on MailException catch (e) {
       // 授权失败/网络错误
       // ignore: avoid_print
-      print('connectToAccount failed: $e');
+      debugPrint('connectToAccount failed: $e');
       return false;
     } catch (e) {
       // ignore: avoid_print
-      print('connectToAccount error: $e');
+      debugPrint('connectToAccount error: $e');
       return false;
     }
   }
@@ -48,20 +58,23 @@ class EmailService {
   // 抓取最近邮件（使用账户协议），解析主题/发件人/时间与文本/HTML内容
   Future<List<EmailMessage>> fetchRecentEmails(
     EmailAccount account, {
-    int count = 50,
+    int? count,
   }) async {
     final protocol = account.protocol.toUpperCase();
+    // 默认获取更多邮件，确保能覆盖被清理的邮件
+    final fetchCount = count ?? 2000;
+    
     if (protocol == 'IMAP') {
-      return _fetchImapRecent(account, count: count);
+      return _fetchImapRecent(account, count: fetchCount);
     } else if (protocol == 'POP3') {
-      return _fetchPop3Recent(account, count: count);
+      return _fetchPop3Recent(account, count: fetchCount);
     } else {
       throw UnsupportedError('仅支持 IMAP/POP3 读取邮件');
     }
   }
 
   // 使用 enough_mail 的便捷方法获取最近邮件
-  Future<List<EmailMessage>> _fetchImapRecent(EmailAccount account, {int count = 50}) async {
+  Future<List<EmailMessage>> _fetchImapRecent(EmailAccount account, {int count = 1000}) async {
     final client = ImapClient(isLogEnabled: false);
     try {
       await client.connectToServer(account.serverHost, account.serverPort, isSecure: account.useSsl);
@@ -83,13 +96,13 @@ class EmailService {
         } catch (e) {
           // 单封失败不影响整体
           // ignore: avoid_print
-          print('imap convert message error: $e');
+          debugPrint('imap convert message error: $e');
         }
       }
       return result;
     } on MailException catch (e) {
       // ignore: avoid_print
-      print('IMAP fetch error: $e');
+      debugPrint('IMAP fetch error: $e');
       rethrow;
     } finally {
       try {
@@ -103,7 +116,7 @@ class EmailService {
     }
   }
 
-  Future<List<EmailMessage>> _fetchPop3Recent(EmailAccount account, {int count = 50}) async {
+  Future<List<EmailMessage>> _fetchPop3Recent(EmailAccount account, {int count = 1000}) async {
     final client = PopClient(isLogEnabled: false);
     try {
       await client.connectToServer(account.serverHost, account.serverPort, isSecure: account.useSsl);
@@ -131,13 +144,13 @@ class EmailService {
           }
         } catch (e) {
           // ignore: avoid_print
-          print('POP3 retrieve index=$i error: $e');
+          debugPrint('POP3 retrieve index=$i error: $e');
         }
       }
       return result;
     } on MailException catch (e) {
       // ignore: avoid_print
-      print('POP3 fetch error: $e');
+      debugPrint('POP3 fetch error: $e');
       rethrow;
     } finally {
       try {
@@ -160,13 +173,37 @@ class EmailService {
     final senderEmail = from?.email ?? 'unknown@unknown';
     final date = mime.decodeDate() ?? DateTime.now();
 
-    // 内容优先取 text/plain，再取 text/html
-    String? text = mime.decodeTextPlainPart();
-    String? html = mime.decodeTextHtmlPart();
-    if ((text == null || text.trim().isEmpty) && html != null) {
-      // 提供一个简短的纯文本预览
-      final stripped = html.replaceAll(RegExp(r'<[^>]*>'), ' ').replaceAll(RegExp(r'\\s+'), ' ').trim();
-      text = stripped.isNotEmpty ? stripped : null;
+    // 内容优先取 text/plain，避免HTML解析导致的输出问题
+    String? text;
+    String? html;
+    
+    // 在静默模式下解析邮件内容，避免控制台输出
+    try {
+      text = mime.decodeTextPlainPart();
+      if (text == null || text.trim().isEmpty) {
+        // 尝试解析HTML内容，但限制长度避免输出过多
+        html = mime.decodeTextHtmlPart();
+        if (html != null && html.isNotEmpty) {
+          // 简单提取文本，避免复杂HTML解析
+          final stripped = html
+              .replaceAll(RegExp(r'<[^>]*>'), ' ')
+              .replaceAll(RegExp(r'\s+'), ' ')
+              .trim();
+          text = stripped.isNotEmpty 
+              ? (stripped.length > 500 ? '${stripped.substring(0, 500)}...' : stripped)
+              : '(HTML邮件)';
+          // 限制HTML内容长度
+          if (html.length > 10000) {
+            html = '${html.substring(0, 10000)}...';
+          }
+        } else {
+          text = '(无内容)';
+        }
+      }
+    } catch (e) {
+      debugPrint('邮件内容解析失败: $e');
+      text = '(邮件内容解析失败)';
+      html = null;
     }
 
     // 优先使用邮件头中的 Message-ID，如果不存在，则生成一个确定性的 ID

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import '../database/database_helper.dart';
 import '../models/email_account.dart';
 import '../services/email_service.dart';
@@ -143,7 +144,7 @@ class AccountRepository {
       return false;
     } catch (e) {
       // ignore: avoid_print
-      print('Error activating account: $e');
+      debugPrint('Error activating account: $e');
       return false;
     }
   }
@@ -202,7 +203,7 @@ class AccountRepository {
       results[account.id!] = success;
       if (!success) {
         // ignore: avoid_print
-        print('Failed to connect account: ${account.email}');
+        debugPrint('Failed to connect account: ${account.email}');
       }
     }
     

@@ -23,13 +23,21 @@ class HomePage extends ConsumerStatefulWidget {
   ConsumerState<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends ConsumerState<HomePage> {
+class _HomePageState extends ConsumerState<HomePage> with TickerProviderStateMixin {
   int _selectedTabIndex = 0;
   bool _isLoading = false;
   bool _isRefreshing = false;
+  bool _hasPerformedInitialSync = false;
   List<EmailMessage> _emails = [];
   final EmailRepository _emailRepository = EmailRepository();
   final AccountRepository _accountRepository = AccountRepository();
+  
+  // 同步进度相关
+  late AnimationController _syncAnimationController;
+  late Animation<double> _syncAnimation;
+  int _totalAccounts = 0;
+  int _currentAccountIndex = 0;
+  String _currentAccountName = '';
 
 
   final List<String> _filterTabs = [
@@ -41,7 +49,39 @@ class _HomePageState extends ConsumerState<HomePage> {
   @override
   void initState() {
     super.initState();
+    
+    // 初始化同步动画
+    _syncAnimationController = AnimationController(
+      duration: const Duration(seconds: 2),
+      vsync: this,
+    );
+    _syncAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _syncAnimationController,
+      curve: Curves.easeInOut,
+    ));
+    
     _loadEmails();
+    // 应用启动时自动同步一次
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _performInitialSync();
+    });
+  }
+  
+  @override
+  void dispose() {
+    _syncAnimationController.dispose();
+    super.dispose();
+  }
+
+  /// 应用启动时的初始同步
+  Future<void> _performInitialSync() async {
+    if (_hasPerformedInitialSync) return;
+    
+    _hasPerformedInitialSync = true;
+    await _refreshEmails();
   }
 
   Future<void> _loadEmails() async {
@@ -80,17 +120,29 @@ class _HomePageState extends ConsumerState<HomePage> {
       return;
     }
 
+    // 显示同步进度对话框
+    if (mounted && !_isRefreshing) {
+      _showSyncProgressDialog(activeAccounts.length);
+    }
+
     List<EmailMessage> allSyncedEmails = [];
     bool hasError = false;
     int accountsWithNoNewMail = 0;
+    int currentAccountIndex = 0;
 
     for (final account in activeAccounts) {
       try {
-        final synced = await _emailRepository.syncEmails(account);
+        // 更新同步进度
+        if (mounted && !_isRefreshing) {
+          _updateSyncProgress(currentAccountIndex, account.displayName ?? account.email);
+        }
+        
+        final synced = await _emailRepository.syncEmails(account, forceRefresh: _isRefreshing);
         if (synced.isEmpty) {
           accountsWithNoNewMail++;
         }
         allSyncedEmails.addAll(synced);
+        currentAccountIndex++;
       } on MailException {
         hasError = true;
         if (mounted) {
@@ -126,6 +178,11 @@ class _HomePageState extends ConsumerState<HomePage> {
       });
     }
 
+    // 关闭同步进度对话框
+    if (mounted && !_isRefreshing) {
+      Navigator.of(context, rootNavigator: true).pop();
+    }
+
     // 在所有操作完成后，根据最终状态显示提示
     if (!hasError && finalEmails.isEmpty) {
         _showErrorDialog(
@@ -139,6 +196,59 @@ class _HomePageState extends ConsumerState<HomePage> {
                 const SnackBar(content: Text('所有账户均无新邮件。')),
             );
         }
+    }
+  }
+  
+  void _showSyncProgressDialog(int totalAccounts) {
+    _totalAccounts = totalAccounts;
+    _currentAccountIndex = 0;
+    _syncAnimationController.repeat();
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedBuilder(
+                animation: _syncAnimation,
+                builder: (context, child) => CircularProgressIndicator(
+                  value: _totalAccounts > 0 ? _currentAccountIndex / _totalAccounts : null,
+                  strokeWidth: 3,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '正在同步邮件...',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _currentAccountName.isNotEmpty 
+                    ? '当前账户: $_currentAccountName'
+                    : '准备同步...',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '${_currentAccountIndex}/$_totalAccounts',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+  
+  void _updateSyncProgress(int currentIndex, String accountName) {
+    _currentAccountIndex = currentIndex;
+    _currentAccountName = accountName;
+    // 触发对话框重建
+    if (mounted) {
+      setState(() {});
     }
   }
 
@@ -470,9 +580,21 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   Widget _buildFloatingActionButton() {
     return FloatingActionButton(
-      onPressed: _refreshEmails,
-      backgroundColor: AppTheme.primaryColor,
-      child: const Icon(Icons.refresh, color: Colors.white),
+      onPressed: _isRefreshing ? null : _refreshEmails,
+      backgroundColor: _isRefreshing ? Colors.grey : AppTheme.primaryColor,
+      child: AnimatedBuilder(
+        animation: _syncAnimationController,
+        builder: (context, child) {
+          return Transform.rotate(
+            angle: _isRefreshing ? _syncAnimation.value * 2 * 3.14159 : 0,
+            child: Icon(
+              Icons.refresh,
+              color: Colors.white,
+              size: _isRefreshing ? 28 : 24,
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -489,9 +611,18 @@ class _HomePageState extends ConsumerState<HomePage> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('邮件已刷新'),
-            duration: Duration(seconds: 1),
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                const Text('邮件已刷新'),
+                const Spacer(),
+                Text('${_emails.length}封', style: const TextStyle(fontWeight: FontWeight.bold)),
+              ],
+            ),
+            duration: const Duration(seconds: 2),
+            backgroundColor: Colors.green,
           ),
         );
       }
@@ -504,6 +635,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         setState(() {
           _isRefreshing = false;
         });
+        _syncAnimationController.stop();
       }
     }
   }
@@ -803,7 +935,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                   ),
                 ),
                 Text(
-                  'v0.3.0',
+                  'v0.4.5',
                   style: TextStyle(
                     color: Colors.white70,
                     fontSize: 14,
@@ -891,7 +1023,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     showAboutDialog(
       context: context,
       applicationName: '新闻邮件阅读器',
-      applicationVersion: '0.3.0',
+      applicationVersion: '0.4.5',
       applicationIcon: Container(
         width: 64,
         height: 64,

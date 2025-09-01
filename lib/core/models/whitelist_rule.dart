@@ -57,15 +57,53 @@ class WhitelistRule {
     );
   }
 
+  /// 检查邮件是否匹配此规则
   bool matches(String senderEmail, String subject, String content) {
     if (!isActive) return false;
     
     switch (type) {
       case WhitelistType.sender:
-        return senderEmail.toLowerCase().contains(value.toLowerCase());
+        return _matchesSender(senderEmail);
       case WhitelistType.keyword:
-        final searchText = '$subject $content'.toLowerCase();
-        return searchText.contains(value.toLowerCase());
+        return _matchesKeyword(subject, content);
     }
+  }
+
+  bool _matchesSender(String senderEmail) {
+    final email = senderEmail.toLowerCase().trim();
+    final rule = value.toLowerCase().trim();
+    
+    if (rule.isEmpty || email.isEmpty) return false;
+    
+    // 支持完整邮箱匹配和域名匹配
+    if (rule.startsWith('@')) {
+      // 域名匹配，如 @example.com
+      return email.endsWith(rule);
+    } else if (rule.contains('@')) {
+      // 完整邮箱匹配
+      return email == rule;
+    } else {
+      // 部分匹配（用户名或域名部分）
+      return email.contains(rule);
+    }
+  }
+
+  bool _matchesKeyword(String subject, String content) {
+    final keyword = value.toLowerCase().trim();
+    if (keyword.isEmpty) return false;
+    
+    final subjectLower = subject.toLowerCase();
+    final contentLower = content.toLowerCase();
+    
+    // 支持多个关键词（用逗号分隔）
+    final keywords = keyword.split(',').map((k) => k.trim()).where((k) => k.isNotEmpty);
+    
+    for (final kw in keywords) {
+      if (subjectLower.contains(kw) || contentLower.contains(kw)) {
+        return true;
+      }
+    }
+    
+    return false;
   }
 }

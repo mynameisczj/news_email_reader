@@ -8,6 +8,7 @@ import '../../../../core/providers/theme_provider.dart';
 import '../widgets/account_management_section.dart';
 import '../widgets/whitelist_management_section.dart';
 import '../widgets/ai_settings_section.dart';
+import '../widgets/email_sync_config_section.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -23,7 +24,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
   }
 
   @override
@@ -36,6 +37,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
           AccountManagementSection(),
           WhitelistManagementSection(),
           AISettingsSection(),
+          EmailSyncConfigSection(),
           AppSettingsSection(),
         ],
       ),
@@ -64,6 +66,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
             text: 'AI设置',
           ),
           Tab(
+            icon: Icon(Icons.sync),
+            text: '同步',
+          ),
+          Tab(
             icon: Icon(Icons.settings),
             text: '应用',
           ),
@@ -90,7 +96,6 @@ class _AppSettingsSectionState extends ConsumerState<AppSettingsSection> {
   final SettingsService _settingsService = SettingsService();
   final StorageService _storageService = StorageService.instance;
   
-  bool _darkMode = true;
   bool _notifications = true;
   String _cacheSize = '计算中...';
 
@@ -102,14 +107,10 @@ class _AppSettingsSectionState extends ConsumerState<AppSettingsSection> {
   }
 
   Future<void> _loadSettings() async {
-    final darkMode = await _settingsService.getDarkMode();
     final notifications = await _settingsService.getNotifications();
 
-    
     setState(() {
-      _darkMode = darkMode;
       _notifications = notifications;
-
     });
   }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/models/whitelist_rule.dart';
 import '../../../../core/services/whitelist_service.dart';
@@ -56,15 +57,46 @@ class _WhitelistManagementSectionState extends ConsumerState<WhitelistManagement
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: TabBar(
-        controller: _tabController,
-        indicatorColor: AppTheme.primaryColor,
-        labelColor: AppTheme.primaryColor,
-        unselectedLabelColor: AppTheme.textSecondaryColor,
-        tabs: const [
-          Tab(text: '发件人白名单'),
-          Tab(text: '关键词白名单'),
-        ],
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(100),
+        child: Column(
+          children: [
+            // 导入导出按钮行
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _importRules,
+                      icon: const Icon(Icons.file_upload),
+                      label: const Text('导入'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _exportRules,
+                      icon: const Icon(Icons.file_download),
+                      label: const Text('导出'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Tab栏
+            TabBar(
+              controller: _tabController,
+              indicatorColor: AppTheme.primaryColor,
+              labelColor: AppTheme.primaryColor,
+              unselectedLabelColor: AppTheme.textSecondaryColor,
+              tabs: const [
+                Tab(text: '发件人白名单'),
+                Tab(text: '关键词白名单'),
+              ],
+            ),
+          ],
+        ),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -405,6 +437,77 @@ class _WhitelistManagementSectionState extends ConsumerState<WhitelistManagement
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('添加失败: $e')),
+        );
+      }
+    }
+  }
+
+  /// 导入白名单规则
+  Future<void> _importRules() async {
+    try {
+      // 这部分代码已被替换为JSON粘贴导入方式
+      // 如果需要文件导入功能，请添加file_picker依赖
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('导入失败: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  /// 导出白名单规则
+  Future<void> _exportRules() async {
+    try {
+      final filePath = await _whitelistService.saveRulesToFile();
+      
+      if (mounted) {
+        // 显示导出成功对话框，提供分享选项
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('导出成功'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('白名单规则已导出到:'),
+                const SizedBox(height: 8),
+                Text(
+                  filePath,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey,
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('确定'),
+              ),
+              TextButton(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  await Share.shareXFiles([XFile(filePath)]);
+                },
+                child: const Text('分享'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('导出失败: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }

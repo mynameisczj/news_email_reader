@@ -56,4 +56,45 @@ class SettingsService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyDarkMode, value);
   }
+
+  // 邮件同步设置
+  Future<void> setSyncQuantity(int quantity) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('sync_quantity', quantity);
+  }
+
+  Future<int> getSyncQuantity() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt('sync_quantity') ?? 100;
+  }
+
+  Future<void> setSyncTimeRange(int days) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('sync_time_range', days);
+  }
+
+  Future<int> getSyncTimeRange() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt('sync_time_range') ?? 30;
+  }
+
+  Future<void> setAutoSync(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('auto_sync', enabled);
+  }
+
+  Future<bool> getAutoSync() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('auto_sync') ?? true;
+  }
+
+  Future<void> setSyncOnStartup(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('sync_on_startup', enabled);
+  }
+
+  Future<bool> getSyncOnStartup() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('sync_on_startup') ?? true;
+  }
 }

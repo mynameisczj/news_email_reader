@@ -1,4 +1,7 @@
 import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
 import '../models/whitelist_rule.dart';
 import '../models/email_message.dart';
 import 'storage_service.dart';
@@ -116,5 +119,124 @@ class WhitelistService {
   Future<bool> ruleExists(WhitelistType type, String value) async {
     final rules = await _loadRules();
     return rules.any((r) => r.type == type && r.value == value);
+  }
+
+  /// 导出白名单规则到JSON文件
+  Future<String> exportRulesToJson() async {
+    final rules = await _loadRules();
+    final exportData = {
+      'version': '1.0',
+      'exportDate': DateTime.now().toIso8601String(),
+      'rules': rules.map((r) => r.toMap()).toList(),
+    };
+    return json.encode(exportData);
+  }
+
+  /// 从JSON字符串导入白名单规则
+  Future<int> importRulesFromJson(String jsonString) async {
+    try {
+      final data = json.decode(jsonString) as Map<String, dynamic>;
+      final rulesData = data['rules'] as List<dynamic>?;
+      
+      if (rulesData == null) {
+        throw Exception('JSON格式错误：缺少rules字段');
+      }
+
+      final existingRules = await _loadRules();
+      int importedCount = 0;
+      
+      for (final ruleData in rulesData) {
+        try {
+          final ruleMap = Map<String, dynamic>.from(ruleData);
+          final rule = WhitelistRule.fromMap(ruleMap);
+          
+          // 检查是否已存在相同规则
+          final exists = existingRules.any((r) => 
+            r.type == rule.type && r.value == rule.value);
+          
+          if (!exists) {
+            // 重新分配ID以避免冲突
+            final newRule = rule.copyWith(
+              id: null,
+              createdAt: DateTime.now(),
+            );
+            await addRule(newRule);
+            importedCount++;
+          }
+        } catch (e) {
+          // 跳过无效的规则，继续处理其他规则
+          debugPrint('跳过无效规则: $e');
+        }
+      }
+      
+      return importedCount;
+    } catch (e) {
+      throw Exception('导入失败: $e');
+    }
+  }
+
+  /// 保存白名单规则到文件
+  Future<String> saveRulesToFile() async {
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final file = File('${directory.path}/whitelist_rules_${DateTime.now().millisecondsSinceEpoch}.json');
+      
+      final jsonString = await exportRulesToJson();
+      await file.writeAsString(jsonString);
+      
+      return file.path;
+    } catch (e) {
+      throw Exception('保存文件失败: $e');
+    }
+  }
+
+  /// 从文件加载白名单规则
+  Future<int> loadRulesFromFile(String filePath) async {
+    try {
+      final file = File(filePath);
+      if (!await file.exists()) {
+        throw Exception('文件不存在');
+      }
+      
+      final jsonString = await file.readAsString();
+      return await importRulesFromJson(jsonString);
+    } catch (e) {
+      throw Exception('读取文件失败: $e');
+    }
+  }
+
+  /// 获取所有规则（包括未激活的）
+  Future<List<WhitelistRule>> getAllRulesIncludingInactive() async {
+    final rules = await _loadRules();
+    rules.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return rules;
+  }
+
+  /// 批量更新规则状态
+  Future<void> updateRulesStatus(List<int> ruleIds, bool isActive) async {
+    final rules = await _loadRules();
+    bool hasChanges = false;
+    
+    for (int i = 0; i < rules.length; i++) {
+      if (ruleIds.contains(rules[i].id)) {
+        rules[i] = rules[i].copyWith(isActive: isActive);
+        hasChanges = true;
+      }
+    }
+    
+    if (hasChanges) {
+      await _saveRules(rules);
+    }
+  }
+
+  /// 批量删除规则
+  Future<int> deleteRules(List<int> ruleIds) async {
+    final rules = await _loadRules();
+    final originalCount = rules.length;
+    
+    rules.removeWhere((rule) => ruleIds.contains(rule.id));
+    await _saveRules(rules);
+    
+    return originalCount - rules.length;
   }
 }

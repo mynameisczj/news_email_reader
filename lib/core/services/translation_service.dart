@@ -1,5 +1,8 @@
 import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
 import 'package:crypto/crypto.dart';
 
 class TranslationService {
@@ -8,9 +11,70 @@ class TranslationService {
   String? _libreApiKey;
   static final TranslationService _instance = TranslationService._internal();
   factory TranslationService() => _instance;
-  TranslationService._internal();
+  TranslationService._internal() {
+    _initializeDio();
+  }
 
-  final Dio _dio = Dio();
+  void _initializeDio() {
+    _dio = Dio();
+    
+    // 配置超时时间
+    _dio.options.connectTimeout = const Duration(seconds: 15);
+    _dio.options.receiveTimeout = const Duration(seconds: 30);
+    _dio.options.sendTimeout = const Duration(seconds: 15);
+    
+    // 配置SSL和证书验证
+    (_dio.httpClientAdapter as IOHttpClientAdapter).createHttpClient = () {
+      final client = HttpClient();
+      
+      // 配置SSL上下文
+      client.badCertificateCallback = (cert, host, port) {
+        // 对于LibreTranslate等服务，允许连接
+        return host.contains('libretranslate') || 
+               host.contains('translate') ||
+               host.contains('argosopentech') ||
+               host == 'libretranslate.de' ||
+               host == 'libretranslate.com';
+      };
+      
+      // 设置连接超时
+      client.connectionTimeout = const Duration(seconds: 15);
+      client.idleTimeout = const Duration(seconds: 15);
+      
+      return client;
+    };
+    
+    // 添加重试拦截器
+    _dio.interceptors.add(
+      InterceptorsWrapper(
+        onError: (error, handler) async {
+          if (error.type == DioExceptionType.connectionTimeout ||
+              error.type == DioExceptionType.receiveTimeout ||
+              error.type == DioExceptionType.sendTimeout) {
+            // 超时重试一次
+            try {
+              final response = await _dio.request(
+                error.requestOptions.path,
+                data: error.requestOptions.data,
+                queryParameters: error.requestOptions.queryParameters,
+                options: Options(
+                  method: error.requestOptions.method,
+                  headers: error.requestOptions.headers,
+                ),
+              );
+              handler.resolve(response);
+              return;
+            } catch (e) {
+              // 重试失败，继续抛出原错误
+            }
+          }
+          handler.next(error);
+        },
+      ),
+    );
+  }
+
+  late final Dio _dio;
   
   // 腾讯云翻译API配置
   static const String _baseUrl = 'https://tmt.tencentcloudapi.com';
@@ -313,29 +377,77 @@ class TranslationService {
     required String targetLanguage,
     String sourceLanguage = 'auto',
   }) async {
-    try {
-      final response = await _dio.post(
-        '$_libreBaseUrl/translate',
-        data: {
-          'q': text,
-          'source': sourceLanguage,
-          'target': targetLanguage,
-          'format': 'text',
-          if (_libreApiKey != null && _libreApiKey!.isNotEmpty) 'api_key': _libreApiKey,
-        },
-        options: Options(
-          contentType: 'application/json',
-        ),
-      );
-      if (response.statusCode == 200) {
-        final data = response.data;
-        final translated = data['translatedText'] ?? '';
-        return translated.isNotEmpty ? translated : text;
+    // 使用更稳定的翻译服务实例
+    final fallbackUrls = [
+      'https://translate.argosopentech.com',  // 更稳定的服务
+      'https://libretranslate.de',
+      'https://libretranslate.com',
+    ];
+    
+    Exception? lastException;
+    
+    for (final baseUrl in fallbackUrls) {
+      try {
+        debugPrint('尝试翻译服务: $baseUrl');
+        
+        final response = await _dio.post(
+          '$baseUrl/translate',
+          data: {
+            'q': text.length > 1000 ? text.substring(0, 1000) : text, // 限制文本长度
+            'source': sourceLanguage == 'auto' ? 'en' : sourceLanguage, // 避免auto检测问题
+            'target': targetLanguage,
+            'format': 'text',
+            if (_libreApiKey != null && _libreApiKey!.isNotEmpty) 'api_key': _libreApiKey,
+          },
+          options: Options(
+            contentType: 'application/json',
+            validateStatus: (status) => status != null && status < 500,
+            headers: {
+              'User-Agent': 'NewsEmailReader/0.4.5',
+            },
+          ),
+        );
+        
+        if (response.statusCode == 200) {
+          final data = response.data;
+          final translated = data['translatedText'] ?? '';
+          debugPrint('翻译成功: ${translated.length} 字符');
+          return translated.isNotEmpty ? translated : text;
+        } else if (response.statusCode == 429) {
+          debugPrint('服务 $baseUrl 速率限制，尝试下一个');
+          await Future.delayed(const Duration(seconds: 1)); // 短暂延迟
+          continue;
+        } else {
+          throw DioException(
+            requestOptions: response.requestOptions,
+            response: response,
+            message: 'HTTP ${response.statusCode}',
+          );
+        }
+      } catch (e) {
+        lastException = e is Exception ? e : Exception('翻译服务错误: $e');
+        debugPrint('LibreTranslate服务 $baseUrl 失败: $e');
+        
+        // 如果是网络连接问题，尝试下一个服务
+        if (e is DioException) {
+          if (e.type == DioExceptionType.connectionTimeout ||
+              e.type == DioExceptionType.receiveTimeout ||
+              e.type == DioExceptionType.sendTimeout ||
+              e.type == DioExceptionType.connectionError ||
+              e.message?.contains('HandshakeException') == true ||
+              e.message?.contains('Connection terminated') == true) {
+            debugPrint('网络连接问题，尝试下一个服务');
+            continue;
+          }
+        }
+        
+        // 其他错误也尝试下一个服务
+        continue;
       }
-      throw Exception('LibreTranslate请求失败: ${response.statusCode}');
-    } catch (e) {
-      throw Exception('LibreTranslate错误: $e');
     }
+    
+    // 所有服务都失败了
+    throw lastException ?? Exception('所有翻译服务都不可用，请检查网络连接');
   }
 
   Future<String> _detectLanguageLibre(String text) async {

@@ -4,11 +4,11 @@ import 'package:enough_mail/enough_mail.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/models/email_message.dart';
-import '../../../../core/utils/animation_utils.dart';
 import '../../../../core/repositories/email_repository.dart';
 import '../../../../core/repositories/account_repository.dart';
 import '../../../../core/services/ai_service.dart';
-import '../../../../core/services/settings_service.dart';
+import '../../../../core/services/translation_service.dart';
+
 import '../../../reader/presentation/pages/email_reader_page.dart';
 import '../../../settings/presentation/pages/settings_page.dart';
 import '../../../notes/presentation/pages/notes_page.dart';
@@ -27,11 +27,10 @@ class _HomePageState extends ConsumerState<HomePage> {
   int _selectedTabIndex = 0;
   bool _isLoading = false;
   bool _isRefreshing = false;
-  bool _isFirstLoad = true;
   List<EmailMessage> _emails = [];
   final EmailRepository _emailRepository = EmailRepository();
   final AccountRepository _accountRepository = AccountRepository();
-  final SettingsService _settingsService = SettingsService();
+
 
   final List<String> _filterTabs = [
     '全部',
@@ -53,13 +52,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     });
 
     try {
-      if (_isFirstLoad) {
-        final shouldAutoSync = await _settingsService.getAutoSync();
-        if (shouldAutoSync) {
-          await _syncAllActiveAccounts();
-        }
-        _isFirstLoad = false;
-      }
+
       await _applyCurrentFilter();
     } catch (e) {
       if (mounted) {
@@ -547,15 +540,17 @@ class _HomePageState extends ConsumerState<HomePage> {
       }
     }
 
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => EmailReaderPage(email: email),
-      ),
-    );
-    
-    // 从阅读器返回后，可能需要刷新状态（例如收藏、笔记）
-    _refreshSingleEmail(email.messageId);
+    if (mounted) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => EmailReaderPage(email: email),
+        ),
+      );
+      
+      // 从阅读器返回后，可能需要刷新状态（例如收藏、笔记）
+      _refreshSingleEmail(email.messageId);
+    }
   }
   
   Future<void> _refreshSingleEmail(String messageId) async {
@@ -698,10 +693,60 @@ class _HomePageState extends ConsumerState<HomePage> {
     }
   }
 
-  void _translateEmail(EmailMessage emailData) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('翻译功能开发中...')),
-    );
+  void _translateEmail(EmailMessage emailData) async {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(const SnackBar(content: Text('正在翻译...'), duration: Duration(milliseconds: 800)));
+    try {
+      final service = TranslationService();
+      final originalText = emailData.contentText ??
+          (emailData.contentHtml != null ? _htmlToPlainEmailText(emailData.contentHtml!) : '');
+      final res = await service.translateEmail(
+        subject: emailData.subject,
+        content: originalText,
+        targetLanguage: 'zh',
+        sourceLanguage: 'auto',
+      );
+      if (!mounted) return;
+      showModalBottomSheet(
+        context: context,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        builder: (context) {
+          return Padding(
+            padding: const EdgeInsets.all(16),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('翻译结果（→ 中文）', style: TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 12),
+                  Text(res['subject'] ?? '', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 12),
+                  Text(res['content'] ?? '', style: Theme.of(context).textTheme.bodyMedium),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text('翻译失败: $e'), backgroundColor: Colors.red));
+    }
+  }
+
+  String _htmlToPlainEmailText(String html) {
+    var text = html.replaceAll(RegExp(r'<script[^>]*>.*?</script>', dotAll: true), '')
+                   .replaceAll(RegExp(r'<style[^>]*>.*?</style>', dotAll: true), '');
+    text = text.replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n');
+    text = text.replaceAll(RegExp(r'</p>', caseSensitive: false), '\n\n');
+    text = text.replaceAll(RegExp(r'<[^>]+>'), '');
+    text = text.replaceAll('&nbsp;', ' ')
+               .replaceAll('&amp;', '&')
+               .replaceAll('&lt;', '<')
+               .replaceAll('&gt;', '>');
+    return text.trim();
   }
 
   void _shareEmail(EmailMessage emailData) {

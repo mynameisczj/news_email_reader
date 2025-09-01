@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/models/email_message.dart';
 import '../../../../core/repositories/email_repository.dart';
+import '../../../reader/presentation/pages/email_reader_page.dart';
 
 class NotesPage extends StatefulWidget {
   const NotesPage({super.key});
@@ -97,109 +98,119 @@ class _NotesPageState extends State<NotesPage> {
   }
 
   Widget _buildNoteCard(EmailMessage email) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      color: AppTheme.cardColor,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 邮件标题
-            Text(
-              email.subject,
-              style: const TextStyle(
-                color: AppTheme.textPrimaryColor,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 8),
-            
-            // 发件人和日期
-            Row(
-              children: [
-                Icon(
-                  Icons.person_outline,
-                  size: 16,
-                  color: AppTheme.textSecondaryColor,
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => EmailReaderPage(email: email),
+          ),
+        );
+      },
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 12),
+        color: AppTheme.cardColor,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 邮件标题
+              Text(
+                email.subject,
+                style: const TextStyle(
+                  color: AppTheme.textPrimaryColor,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
                 ),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    email.displaySender,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 8),
+              
+              // 发件人和日期
+              Row(
+                children: [
+                  const Icon(
+                    Icons.person_outline,
+                    size: 16,
+                    color: AppTheme.textSecondaryColor,
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      email.displaySender,
+                      style: const TextStyle(
+                        color: AppTheme.textSecondaryColor,
+                        fontSize: 14,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Icon(
+                    Icons.access_time,
+                    size: 16,
+                    color: AppTheme.textSecondaryColor,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    _formatDate(email.receivedDate),
                     style: const TextStyle(
                       color: AppTheme.textSecondaryColor,
                       fontSize: 14,
                     ),
-                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-                const SizedBox(width: 8),
-                Icon(
-                  Icons.access_time,
-                  size: 16,
-                  color: AppTheme.textSecondaryColor,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  _formatDate(email.receivedDate),
-                  style: const TextStyle(
-                    color: AppTheme.textSecondaryColor,
-                    fontSize: 14,
-                  ),
-                ),
-              ],
-            ),
-            
-            const SizedBox(height: 12),
-            const Divider(color: AppTheme.textSecondaryColor),
-            const SizedBox(height: 8),
-            
-            // 笔记图标和标题
-            const Row(
-              children: [
-                Icon(
-                  Icons.note,
-                  size: 18,
-                  color: AppTheme.secondaryColor,
-                ),
-                SizedBox(width: 6),
-                Text(
-                  '我的笔记',
-                  style: TextStyle(
+                ],
+              ),
+              
+              const SizedBox(height: 12),
+              const Divider(color: AppTheme.textSecondaryColor),
+              const SizedBox(height: 8),
+              
+              // 笔记图标和标题
+              const Row(
+                children: [
+                  Icon(
+                    Icons.note,
+                    size: 18,
                     color: AppTheme.secondaryColor,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
+                  ),
+                  SizedBox(width: 6),
+                  Text(
+                    '我的笔记',
+                    style: TextStyle(
+                      color: AppTheme.secondaryColor,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              
+              // 笔记内容
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceColor,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: AppTheme.secondaryColor.withValues(alpha: 0.3),
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            
-            // 笔记内容
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppTheme.surfaceColor,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: AppTheme.secondaryColor.withValues(alpha: 0.3),
+                child: Text(
+                  email.notes!,
+                  style: const TextStyle(
+                    color: AppTheme.textPrimaryColor,
+                    fontSize: 14,
+                    height: 1.4,
+                  ),
                 ),
               ),
-              child: Text(
-                email.notes!,
-                style: const TextStyle(
-                  color: AppTheme.textPrimaryColor,
-                  fontSize: 14,
-                  height: 1.4,
-                ),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

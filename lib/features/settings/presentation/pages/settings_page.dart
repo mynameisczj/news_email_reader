@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/services/settings_service.dart';
 import '../../../../core/services/storage_service.dart';
+import '../../../../core/services/cache_service.dart';
 import '../../../../core/providers/theme_provider.dart';
 import '../widgets/account_management_section.dart';
 import '../widgets/whitelist_management_section.dart';
@@ -91,7 +92,6 @@ class _AppSettingsSectionState extends ConsumerState<AppSettingsSection> {
   
   bool _darkMode = true;
   bool _notifications = true;
-  bool _autoSync = true;
   String _cacheSize = '计算中...';
 
   @override
@@ -104,12 +104,12 @@ class _AppSettingsSectionState extends ConsumerState<AppSettingsSection> {
   Future<void> _loadSettings() async {
     final darkMode = await _settingsService.getDarkMode();
     final notifications = await _settingsService.getNotifications();
-    final autoSync = await _settingsService.getAutoSync();
+
     
     setState(() {
       _darkMode = darkMode;
       _notifications = notifications;
-      _autoSync = autoSync;
+
     });
   }
 
@@ -164,21 +164,7 @@ class _AppSettingsSectionState extends ConsumerState<AppSettingsSection> {
                 activeColor: AppTheme.primaryColor,
               ),
             ),
-            _buildSettingsTile(
-              icon: Icons.sync,
-              title: '自动同步',
-              subtitle: '定期同步邮件',
-              trailing: Switch(
-                value: _autoSync,
-                onChanged: (value) async {
-                  await _settingsService.setAutoSync(value);
-                  setState(() {
-                    _autoSync = value;
-                  });
-                },
-                activeColor: AppTheme.primaryColor,
-              ),
-            ),
+
           ],
         ),
         const SizedBox(height: 24),
@@ -210,7 +196,7 @@ class _AppSettingsSectionState extends ConsumerState<AppSettingsSection> {
             _buildSettingsTile(
               icon: Icons.info,
               title: '版本信息',
-              subtitle: '极客新闻邮件阅读器 v0.2.1',
+              subtitle: '极客新闻邮件阅读器 v0.3.0',
               onTap: () {
                 _showAboutDialog(context);
               },
@@ -298,7 +284,7 @@ class _AppSettingsSectionState extends ConsumerState<AppSettingsSection> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('清理缓存'),
-        content: const Text('确定要清除所有缓存数据吗？这将删除已下载的邮件内容和图片。'),
+        content: const Text('将清除正文内容、图片等缓存，但会保留已收藏或含笔记的邮件及其标记。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -308,10 +294,12 @@ class _AppSettingsSectionState extends ConsumerState<AppSettingsSection> {
             onPressed: () async {
               Navigator.pop(context);
               try {
-                await _storageService.clearAllData();
+                // 仅清正文/图片等缓存，并保留用户操作数据
+                await CacheService().clearAllCache();
+                await _storageService.clearCachePreservingUserData();
                 await _loadCacheSize(); // 刷新缓存大小显示
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('缓存已清理')),
+                  const SnackBar(content: Text('缓存已清理（已保留收藏/笔记数据）')),
                 );
               } catch (e) {
                 ScaffoldMessenger.of(context).showSnackBar(

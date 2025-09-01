@@ -24,11 +24,21 @@ class StorageService {
   
   // 邮件存储
   Future<void> saveEmail(EmailMessage email) async {
+    // 用于“从服务器同步”的保存：合并本地用户操作字段，避免覆盖
     final emails = await getAllEmails();
     final index = emails.indexWhere((e) => e.messageId == email.messageId);
     
     if (index >= 0) {
-      emails[index] = email;
+      final existing = emails[index];
+      final merged = email.copyWith(
+        // 保留本地用户操作与衍生字段
+        isRead: existing.isRead,
+        isStarred: existing.isStarred,
+        aiSummary: existing.aiSummary,
+        notes: existing.notes,
+        createdAt: existing.createdAt,
+      );
+      emails[index] = merged;
     } else {
       emails.add(email);
     }
@@ -37,7 +47,15 @@ class StorageService {
   }
   
   Future<void> updateEmail(EmailMessage email) async {
-    await saveEmail(email);
+    // 用于“本地更新”的保存：以传入为准直接更新
+    final emails = await getAllEmails();
+    final index = emails.indexWhere((e) => e.messageId == email.messageId);
+    if (index >= 0) {
+      emails[index] = email;
+    } else {
+      emails.add(email);
+    }
+    await _saveEmailsToFile(emails);
   }
   
   Future<List<EmailMessage>> getAllEmails() async {
@@ -118,17 +136,40 @@ class StorageService {
     return _prefs.getInt(key) ?? defaultValue;
   }
   
-  // 清理缓存
+  // 清理缓存（保留含收藏或笔记的邮件，且仅清正文等大字段）
   Future<void> clearAllData() async {
-    await _prefs.clear();
-    
     try {
-      final emailsFile = File('${_appDir.path}/emails.json');
-      if (await emailsFile.exists()) {
-        await emailsFile.delete();
+      final emails = await getAllEmails();
+      final preserved = <EmailMessage>[];
+      for (final e in emails) {
+        final hasImportant = e.isStarred || (e.notes != null && e.notes!.isNotEmpty);
+        if (hasImportant) {
+          preserved.add(
+            e.copyWith(
+              contentHtml: null,
+              contentText: null,
+              isCached: false,
+              // aiSummary/notes/标记等用户数据保留
+            ),
+          );
+        }
       }
+      await _saveEmailsToFile(preserved);
     } catch (e) {
       print('Error clearing data: $e');
+    }
+  }
+
+  // 仅清正文/图片等缓存（保留元数据与用户操作），供设置页调用的显式方法
+  Future<void> clearCachePreservingUserData() async {
+    try {
+      final emails = await getAllEmails();
+      final trimmed = emails
+          .map((e) => e.copyWith(contentHtml: null, contentText: null, isCached: false))
+          .toList();
+      await _saveEmailsToFile(trimmed);
+    } catch (e) {
+      print('Error trimming email cache: $e');
     }
   }
   

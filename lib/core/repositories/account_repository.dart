@@ -219,7 +219,7 @@ class AccountRepository {
     }
 
     // 邮箱格式验证
-    final emailRegex = RegExp(r'^[\\w-\\.]+@([\\w-]+\\.)+[\\w-]{2,4}$');
+    final emailRegex = RegExp(r'^[\w\-.]+@([\w-]+\.)+[\w-]{2,4}$');
     if (!emailRegex.hasMatch(account.email)) {
       return false;
     }

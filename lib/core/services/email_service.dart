@@ -206,7 +206,7 @@ class EmailService {
     final subjectHash = _stableHash(subject);
     final seedHash = _stableHash(seed.toString());
     final base = 'msg_${accountEmail}_${senderEmail}_${roundedDate.millisecondsSinceEpoch}_${subjectHash}_${seedHash}';
-    return base.replaceAll(RegExp(r'[^A-Za-z0-9_\\-@.]'), '_');
+    return base.replaceAll(RegExp(r'[^A-Za-z0-9_\-@.]'), '_');
   }
 
   int _stableHash(String s) {

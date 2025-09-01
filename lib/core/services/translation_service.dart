@@ -3,6 +3,9 @@ import 'package:dio/dio.dart';
 import 'package:crypto/crypto.dart';
 
 class TranslationService {
+  // 当未配置腾讯云密钥时，使用LibreTranslate公共实例
+  String _libreBaseUrl = 'https://libretranslate.de';
+  String? _libreApiKey;
   static final TranslationService _instance = TranslationService._internal();
   factory TranslationService() => _instance;
   TranslationService._internal();
@@ -31,14 +34,18 @@ class TranslationService {
     required String targetLanguage,
     String sourceLanguage = 'auto',
   }) async {
-    if (_secretId == null || _secretKey == null) {
-      throw Exception('翻译服务未初始化，请先配置API密钥');
+    // 未配置腾讯云时，走免费LibreTranslate
+    if (!isConfigured()) {
+      return await _translateTextLibre(
+        text: text,
+        targetLanguage: targetLanguage,
+        sourceLanguage: sourceLanguage,
+      );
     }
 
     try {
       final timestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       final headers = _generateHeaders(text, targetLanguage, sourceLanguage, timestamp);
-      
       final response = await _dio.post(
         _baseUrl,
         data: {
@@ -126,14 +133,14 @@ class TranslationService {
 
   /// 检测语言
   Future<String> detectLanguage(String text) async {
-    if (_secretId == null || _secretKey == null) {
-      throw Exception('翻译服务未初始化，请先配置API密钥');
+    // 未配置腾讯云时，使用LibreTranslate检测
+    if (!isConfigured()) {
+      return await _detectLanguageLibre(text);
     }
 
     try {
       final timestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       final headers = _generateDetectionHeaders(text, timestamp);
-      
       final response = await _dio.post(
         _baseUrl,
         data: {
@@ -158,7 +165,6 @@ class TranslationService {
         throw Exception('语言检测请求失败: ${response.statusCode}');
       }
     } catch (e) {
-      // 如果检测失败，返回auto
       return 'auto';
     }
   }
@@ -297,8 +303,60 @@ class TranslationService {
 
   /// 检查API配置是否有效
   bool isConfigured() {
-    return _secretId != null && _secretKey != null && 
+    return _secretId != null && _secretKey != null &&
            _secretId!.isNotEmpty && _secretKey!.isNotEmpty;
+  }
+
+  // ========== LibreTranslate Fallback ==========
+  Future<String> _translateTextLibre({
+    required String text,
+    required String targetLanguage,
+    String sourceLanguage = 'auto',
+  }) async {
+    try {
+      final response = await _dio.post(
+        '$_libreBaseUrl/translate',
+        data: {
+          'q': text,
+          'source': sourceLanguage,
+          'target': targetLanguage,
+          'format': 'text',
+          if (_libreApiKey != null && _libreApiKey!.isNotEmpty) 'api_key': _libreApiKey,
+        },
+        options: Options(
+          contentType: 'application/json',
+        ),
+      );
+      if (response.statusCode == 200) {
+        final data = response.data;
+        final translated = data['translatedText'] ?? '';
+        return translated.isNotEmpty ? translated : text;
+      }
+      throw Exception('LibreTranslate请求失败: ${response.statusCode}');
+    } catch (e) {
+      throw Exception('LibreTranslate错误: $e');
+    }
+  }
+
+  Future<String> _detectLanguageLibre(String text) async {
+    try {
+      final response = await _dio.post(
+        '$_libreBaseUrl/detect',
+        data: {'q': text},
+        options: Options(contentType: 'application/json'),
+      );
+      if (response.statusCode == 200) {
+        final res = response.data;
+        if (res is List && res.isNotEmpty) {
+          final first = res.first;
+          final lang = first['language'] as String?;
+          return lang ?? 'auto';
+        }
+      }
+      return 'auto';
+    } catch (_) {
+      return 'auto';
+    }
   }
 
   /// 清除API配置

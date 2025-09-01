@@ -10,10 +10,12 @@ class CacheService {
   static const String _emailCacheBox = 'email_cache';
   static const String _imageCacheBox = 'image_cache';
   static const String _settingsBox = 'settings';
+  static const String _translationCacheBox = 'translation_cache';
 
   Box<Map>? _emailCache;
   Box<List<int>>? _imageCache;
   Box<String>? _settings;
+  Box<Map>? _translationCache;
 
   /// 初始化缓存服务
   Future<void> initialize() async {
@@ -22,6 +24,7 @@ class CacheService {
     _emailCache = await Hive.openBox<Map>(_emailCacheBox);
     _imageCache = await Hive.openBox<List<int>>(_imageCacheBox);
     _settings = await Hive.openBox<String>(_settingsBox);
+    _translationCache = await Hive.openBox<Map>(_translationCacheBox);
   }
 
   /// 缓存邮件内容
@@ -258,10 +261,11 @@ class CacheService {
 
   /// 清空所有缓存
   Future<void> clearAllCache() async {
-    if (_emailCache == null || _imageCache == null) await initialize();
+    if (_emailCache == null || _imageCache == null || _translationCache == null) await initialize();
     
     await _emailCache!.clear();
     await _imageCache!.clear();
+    await _translationCache!.clear();
   }
 
   /// 清空邮件缓存
@@ -282,6 +286,41 @@ class CacheService {
     if (_imageCache == null) await initialize();
     
     await _imageCache!.clear();
+  }
+
+  /// 缓存翻译结果（按邮件ID与目标语言）
+  Future<void> cacheTranslation(String messageId, String targetLanguage, {
+    required String subject,
+    required String content,
+  }) async {
+    if (_translationCache == null) await initialize();
+    final key = 't_${messageId}_$targetLanguage';
+    final data = {
+      'messageId': messageId,
+      'lang': targetLanguage,
+      'subject': subject,
+      'content': content,
+      'cachedAt': DateTime.now().toIso8601String(),
+    };
+    await _translationCache!.put(key, data);
+  }
+
+  /// 获取翻译缓存，命中则返回subject/content
+  Future<Map<String, String>?> getCachedTranslation(String messageId, String targetLanguage) async {
+    if (_translationCache == null) await initialize();
+    final key = 't_${messageId}_$targetLanguage';
+    final data = _translationCache!.get(key);
+    if (data == null) return null;
+    final map = Map<String, dynamic>.from(data);
+    final subject = map['subject'] as String? ?? '';
+    final content = map['content'] as String? ?? '';
+    return {'subject': subject, 'content': content};
+  }
+
+  /// 清空所有翻译缓存
+  Future<void> clearTranslationCache() async {
+    if (_translationCache == null) await initialize();
+    await _translationCache!.clear();
   }
 
   /// 导出缓存数据

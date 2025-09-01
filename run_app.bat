@@ -1,9 +1,0 @@
-@echo off
-echo Starting News Email Reader App...
-echo.
-echo Checking Flutter installation...
-flutter doctor --version
-echo.
-echo Running the app...
-flutter run --debug
-pause

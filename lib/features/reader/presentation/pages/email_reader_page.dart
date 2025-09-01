@@ -9,6 +9,8 @@ import '../../../../core/models/email_message.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/repositories/email_repository.dart';
 import '../../../../core/services/ai_service.dart';
+import '../../../../core/services/translation_service.dart';
+import '../../../../core/services/cache_service.dart';
 import '../../../notes/presentation/pages/note_editor_page.dart';
 
 class EmailReaderPage extends StatefulWidget {
@@ -28,6 +30,7 @@ class _EmailReaderPageState extends State<EmailReaderPage> {
   final _windowsController = windows_webview.WebviewController();
 
   bool _isWebViewLoading = true;
+  bool _plainTextMode = false;
   late EmailMessage _currentEmail;
   final EmailRepository _emailRepository = EmailRepository();
 
@@ -98,9 +101,12 @@ class _EmailReaderPageState extends State<EmailReaderPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: _buildAppBar(),
-      body: _buildBody(),
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        appBar: _buildAppBar(),
+        body: _buildTabBody(),
+      ),
     );
   }
 
@@ -111,12 +117,160 @@ class _EmailReaderPageState extends State<EmailReaderPage> {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
+      bottom: const TabBar(
+        tabs: [
+          Tab(text: '正文'),
+          Tab(text: '笔记'),
+          Tab(text: '总结'),
+        ],
+      ),
       actions: [
+        IconButton(
+          icon: Icon(_plainTextMode ? Icons.article : Icons.web),
+          tooltip: _plainTextMode ? '切换为HTML视图' : '切换为纯文本',
+          onPressed: () {
+            setState(() {
+              _plainTextMode = !_plainTextMode;
+            });
+          },
+        ),
         IconButton(
           icon: const Icon(Icons.more_vert),
           onPressed: () => _showEmailOptions(),
         ),
       ],
+    );
+  }
+
+  Widget _buildTabBody() {
+    return TabBarView(
+      children: [
+        _buildContentTab(),
+        _buildNotesTab(),
+        _buildSummaryTab(),
+      ],
+    );
+  }
+
+  Widget _buildContentTab() {
+    if (_isWebViewLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final hasContent = (_currentEmail.contentHtml?.trim().isNotEmpty ?? false) ||
+                       (_currentEmail.contentText?.trim().isNotEmpty ?? false);
+
+    if (!hasContent) {
+      return const Center(
+        child: Text('邮件内容为空', style: TextStyle(color: Colors.grey)),
+      );
+    }
+
+    if (_plainTextMode) {
+      final text = _currentEmail.contentText ??
+          (_currentEmail.contentHtml != null ? _htmlToPlainText(_currentEmail.contentHtml!) : '');
+      return SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Text(text, style: Theme.of(context).textTheme.bodyMedium),
+      );
+    }
+
+    final webView = Platform.isWindows
+        ? windows_webview.Webview(
+            _windowsController,
+            permissionRequested: (url, permission, isUserInitiated) async {
+              return windows_webview.WebviewPermissionDecision.allow;
+            },
+          )
+        : WebViewWidget(controller: _webViewController);
+
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: SizedBox(
+        height: MediaQuery.of(context).size.height * 0.75,
+        child: webView,
+      ),
+    );
+  }
+
+  String _htmlToPlainText(String html) {
+    var text = html.replaceAll(RegExp(r'<script[^>]*>.*?</script>', dotAll: true), '')
+                   .replaceAll(RegExp(r'<style[^>]*>.*?</style>', dotAll: true), '');
+    text = text.replaceAll(RegExp(r'<br\\s*/?>', caseSensitive: false), '\n');
+    text = text.replaceAll(RegExp(r'</p>', caseSensitive: false), '\n\n');
+    text = text.replaceAll(RegExp(r'<[^>]+>'), '');
+    text = text.replaceAll('&nbsp;', ' ')
+               .replaceAll('&', '&')
+               .replaceAll('<', '<')
+               .replaceAll('>', '>');
+    return text.trim();
+  }
+
+  Widget _buildNotesTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.note_alt, color: AppTheme.primaryColor),
+              const SizedBox(width: 8),
+              Text('我的笔记', style: Theme.of(context).textTheme.titleLarge),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: () async {
+                  final result = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => NoteEditorPage(email: _currentEmail),
+                    ),
+                  );
+                  if (result == true) {
+                    _refreshEmailState();
+                  }
+                },
+                icon: const Icon(Icons.edit),
+                label: const Text('编辑'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (_currentEmail.notes != null && _currentEmail.notes!.isNotEmpty)
+            Text(_currentEmail.notes!, style: Theme.of(context).textTheme.bodyMedium)
+          else
+            const Text('暂无笔记', style: TextStyle(color: Colors.grey)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.auto_awesome, color: AppTheme.secondaryColor),
+              const SizedBox(width: 8),
+              Text('AI 总结', style: Theme.of(context).textTheme.titleLarge),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: _generateAISummary,
+                icon: const Icon(Icons.build),
+                label: const Text('生成/更新'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (_currentEmail.aiSummary != null && _currentEmail.aiSummary!.isNotEmpty)
+            Text(_currentEmail.aiSummary!, style: Theme.of(context).textTheme.bodyMedium)
+          else
+            const Text('暂无总结，点击右上角生成。', style: TextStyle(color: Colors.grey)),
+        ],
+      ),
     );
   }
 
@@ -321,10 +475,101 @@ class _EmailReaderPageState extends State<EmailReaderPage> {
     }
   }
 
-  void _translateEmail() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('翻译功能开发中...')),
+  void _translateEmail() async {
+    // 语言选择
+    final selectedLang = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        final langs = [
+          {'code': 'zh', 'name': '中文'},
+          {'code': 'en', 'name': 'English'},
+          {'code': 'ja', 'name': '日本語'},
+          {'code': 'ko', 'name': '한국어'},
+          {'code': 'fr', 'name': 'Français'},
+          {'code': 'de', 'name': 'Deutsch'},
+          {'code': 'es', 'name': 'Español'},
+          {'code': 'ru', 'name': 'Русский'},
+        ];
+        return SimpleDialog(
+          title: const Text('选择目标语言'),
+          children: langs.map((e) {
+            return SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, e['code']!),
+              child: Text('${e['name']} (${e['code']})'),
+            );
+          }).toList(),
+        );
+      },
     );
+    if (selectedLang == null) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(const SnackBar(content: Text('正在翻译...'), duration: Duration(milliseconds: 800)));
+
+    try {
+      final cache = CacheService();
+      // 先查缓存
+      final cached = await cache.getCachedTranslation(_currentEmail.messageId, selectedLang);
+      String subjectTr;
+      String contentTr;
+
+      if (cached != null) {
+        subjectTr = cached['subject'] ?? '';
+        contentTr = cached['content'] ?? '';
+      } else {
+        final service = TranslationService();
+        final originalText = _currentEmail.contentText ??
+            (_currentEmail.contentHtml != null ? _htmlToPlainText(_currentEmail.contentHtml!) : '');
+
+        subjectTr = await service.translateText(
+          text: _currentEmail.subject,
+          targetLanguage: selectedLang,
+          sourceLanguage: 'auto',
+        );
+        contentTr = await service.translateText(
+          text: originalText,
+          targetLanguage: selectedLang,
+          sourceLanguage: 'auto',
+        );
+
+        // 写入缓存
+        await cache.cacheTranslation(
+          _currentEmail.messageId,
+          selectedLang,
+          subject: subjectTr,
+          content: contentTr,
+        );
+      }
+
+      if (!mounted) return;
+      showModalBottomSheet(
+        context: context,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        builder: (context) {
+          return Padding(
+            padding: const EdgeInsets.all(16),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('翻译结果（→ $selectedLang）', style: const TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 12),
+                  Text(subjectTr, style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 12),
+                  Text(contentTr, style: Theme.of(context).textTheme.bodyMedium),
+                  const SizedBox(height: 16),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text('翻译失败: $e'), backgroundColor: Colors.red));
+    }
   }
 
   void _shareEmail() {

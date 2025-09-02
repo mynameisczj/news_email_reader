@@ -173,32 +173,18 @@ class EmailService {
     final senderEmail = from?.email ?? 'unknown@unknown';
     final date = mime.decodeDate() ?? DateTime.now();
 
-    // 内容优先取 text/plain，避免HTML解析导致的输出问题
     String? text;
     String? html;
-    
-    // 在静默模式下解析邮件内容，避免控制台输出
+
     try {
+      // 优先获取纯文本部分
       text = mime.decodeTextPlainPart();
-      if (text == null || text.trim().isEmpty) {
-        // 尝试解析HTML内容，但限制长度避免输出过多
-        html = mime.decodeTextHtmlPart();
-        if (html != null && html.isNotEmpty) {
-          // 简单提取文本，避免复杂HTML解析
-          final stripped = html
-              .replaceAll(RegExp(r'<[^>]*>'), ' ')
-              .replaceAll(RegExp(r'\s+'), ' ')
-              .trim();
-          text = stripped.isNotEmpty 
-              ? (stripped.length > 500 ? '${stripped.substring(0, 500)}...' : stripped)
-              : '(HTML邮件)';
-          // 限制HTML内容长度
-          if (html.length > 10000) {
-            html = '${html.substring(0, 10000)}...';
-          }
-        } else {
-          text = '(无内容)';
-        }
+      // 总是获取HTML部分，如果存在的话
+      html = mime.decodeTextHtmlPart();
+
+      // 如果两者都为空，则设置一个占位符
+      if ((text == null || text.trim().isEmpty) && (html == null || html.trim().isEmpty)) {
+        text = '(无内容)';
       }
     } catch (e) {
       debugPrint('邮件内容解析失败: $e');
@@ -243,7 +229,7 @@ class EmailService {
     final subjectHash = _stableHash(subject);
     final seedHash = _stableHash(seed.toString());
     final base = 'msg_${accountEmail}_${senderEmail}_${roundedDate.millisecondsSinceEpoch}_${subjectHash}_${seedHash}';
-    return base.replaceAll(RegExp(r'[^A-Za-z0-9_\-@.]'), '_');
+    return base.replaceAll(RegExp(r'[^A-Za-z0-9_\\-@.]'), '_');
   }
 
   int _stableHash(String s) {

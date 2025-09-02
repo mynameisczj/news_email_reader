@@ -34,7 +34,7 @@ dependencies:
   enough_mail: ^2.1.5
   
   # HTML & Content Rendering
-  html: ^0.15.4
+  html: ^0.15.6
   
   # Image Handling
   cached_network_image: ^3.3.0
@@ -60,6 +60,7 @@ dependencies:
   # Platform-specific WebViews
   webview_flutter: ^4.7.0
   webview_windows: ^0.4.0
+  flutter_html: ^3.0.0
 
 dev_dependencies:
   flutter_test:

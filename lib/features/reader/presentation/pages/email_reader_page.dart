@@ -4,6 +4,9 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_windows/webview_windows.dart' as windows_webview;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:html/parser.dart' show parse;
+import 'package:html/dom.dart' as dom;
+
 import '../../../../core/models/email_message.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/repositories/email_repository.dart';
@@ -41,13 +44,16 @@ class _EmailReaderPageState extends State<EmailReaderPage> {
   }
 
   Future<void> _initializeWebView() async {
+    final html = _composeHtml(_currentEmail.contentHtml, _currentEmail.contentText);
+
     if (Platform.isWindows) {
       await _windowsController.initialize();
-      await _windowsController.loadStringContent(
-        _buildHtmlContent(),
-      );
+      await _windowsController.loadStringContent(html);
       _windowsController.url.listen((url) async {
         if (url.startsWith('http')) {
+          // 重新加载原始邮件以“阻止”导航
+          _windowsController.loadStringContent(html);
+          // 在外部浏览器中打开链接
           final uri = Uri.parse(url);
           if (await canLaunchUrl(uri)) {
             await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -57,28 +63,13 @@ class _EmailReaderPageState extends State<EmailReaderPage> {
     } else {
       _webViewController = WebViewController()
         ..setJavaScriptMode(JavaScriptMode.unrestricted)
-        ..setBackgroundColor(const Color(0x00000000))
         ..setNavigationDelegate(
           NavigationDelegate(
-            onPageStarted: (String url) {
-              if (mounted) {
-                setState(() {
-                  _isWebViewLoading = true;
-                });
-              }
-            },
             onPageFinished: (String url) {
-              if (mounted) {
-                setState(() {
-                  _isWebViewLoading = false;
-                });
-              }
-            },
-            onWebResourceError: (WebResourceError error) {
-              print('WebView error: ${error.description}');
+              if (mounted) setState(() => _isWebViewLoading = false);
             },
             onNavigationRequest: (NavigationRequest request) async {
-              if (request.url.startsWith('http') || request.url.startsWith('https')) {
+              if (request.url.startsWith('http')) {
                 final uri = Uri.parse(request.url);
                 if (await canLaunchUrl(uri)) {
                   await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -89,13 +80,31 @@ class _EmailReaderPageState extends State<EmailReaderPage> {
             },
           ),
         )
-        ..loadHtmlString(_buildHtmlContent());
+        ..loadHtmlString(html);
     }
 
     if (mounted) {
       setState(() {
         _isWebViewLoading = false;
       });
+    }
+  }
+
+  Future<void> _reloadWebViewContent() async {
+    if (!mounted) return;
+    final html = _composeHtml(_currentEmail.contentHtml, _currentEmail.contentText);
+
+    if (Platform.isWindows) {
+      try {
+        if (mounted) setState(() => _isWebViewLoading = true);
+        await _windowsController.loadStringContent(html);
+      } finally {
+        if (mounted) setState(() => _isWebViewLoading = false);
+      }
+    } else {
+      if (mounted) setState(() => _isWebViewLoading = true);
+      await _webViewController.loadHtmlString(html);
+      // onPageFinished will set _isWebViewLoading to false
     }
   }
 
@@ -185,6 +194,7 @@ class _EmailReaderPageState extends State<EmailReaderPage> {
                     setState(() {
                       _plainTextMode = false;
                     });
+                    _reloadWebViewContent();
                   },
                   icon: const Icon(Icons.web),
                   label: const Text('富文本模式'),
@@ -240,16 +250,14 @@ class _EmailReaderPageState extends State<EmailReaderPage> {
   }
 
   String _htmlToPlainText(String html) {
-    var text = html.replaceAll(RegExp(r'<script[^>]*>.*?</script>', dotAll: true), '')
-                   .replaceAll(RegExp(r'<style[^>]*>.*?</style>', dotAll: true), '');
-    text = text.replaceAll(RegExp(r'<br\\s*/?>', caseSensitive: false), '\n');
-    text = text.replaceAll(RegExp(r'</p>', caseSensitive: false), '\n\n');
-    text = text.replaceAll(RegExp(r'<[^>]+>'), '');
-    text = text.replaceAll('&nbsp;', ' ')
-               .replaceAll('&', '&')
-               .replaceAll('<', '<')
-               .replaceAll('>', '>');
-    return text.trim();
+    try {
+      final document = parse(html);
+      final String parsedString = parse(document.body?.text).documentElement!.text;
+      return parsedString;
+    } catch (e) {
+      // Fallback for malformed HTML
+      return html.replaceAll(RegExp(r'<[^>]+>'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+    }
   }
 
   Widget _buildNotesTab() {
@@ -436,7 +444,6 @@ class _EmailReaderPageState extends State<EmailReaderPage> {
   }
 
   void _translateEmail() async {
-    // 语言选择
     final selectedLang = await showDialog<String>(
       context: context,
       builder: (context) {
@@ -468,7 +475,6 @@ class _EmailReaderPageState extends State<EmailReaderPage> {
 
     try {
       final cache = CacheService();
-      // 先查缓存
       final cached = await cache.getCachedTranslation(_currentEmail.messageId, selectedLang);
       String subjectTr;
       String contentTr;
@@ -492,7 +498,6 @@ class _EmailReaderPageState extends State<EmailReaderPage> {
           sourceLanguage: 'auto',
         );
 
-        // 写入缓存
         await cache.cacheTranslation(
           _currentEmail.messageId,
           selectedLang,
@@ -501,7 +506,6 @@ class _EmailReaderPageState extends State<EmailReaderPage> {
         );
       }
 
-      // 显示翻译结果
       if (mounted) {
         showDialog(
           context: context,
@@ -590,128 +594,91 @@ ${_currentEmail.contentText ?? _htmlToPlainText(_currentEmail.contentHtml ?? '')
       setState(() {
         _currentEmail = updatedEmail;
       });
+      if (!_plainTextMode) {
+        _reloadWebViewContent();
+      }
     }
   }
 
-  String _buildHtmlContent() {
-    final htmlContent = _currentEmail.contentHtml;
-
-    // 1. 如果有HTML内容
-    if (htmlContent != null && htmlContent.trim().isNotEmpty) {
-      // 检查是否已经是完整的HTML文档
-      final isFullHtml = htmlContent.trim().toLowerCase().contains('<html') ||
-          htmlContent.trim().toLowerCase().contains('<body');
-
-      if (isFullHtml) {
-        // 如果是完整文档，直接返回。
-        return htmlContent;
-      } else {
-        // 如果是HTML片段，则用我们的模板包裹
-        return _wrapHtmlSnippet(htmlContent);
+  String _composeHtml(String? html, String? text) {
+    final h = html?.trim() ?? '';
+    if (h.isNotEmpty) {
+      try {
+        final doc = parse(h);
+        final isFullDoc = doc.querySelector('html') != null || doc.querySelector('body') != null;
+        if (isFullDoc) {
+          return _injectHeadMeta(doc).outerHtml;
+        } else {
+          return _buildHtmlTemplate(h);
+        }
+      } catch (e) {
+        return _buildHtmlTemplate(h);
       }
     }
 
-    // 2. 如果只有纯文本内容
-    final textContent = _currentEmail.contentText;
-    if (textContent != null && textContent.trim().isNotEmpty) {
-      // 将纯文本转换为HTML
-      final escapedText = textContent
+    final t = text?.trim() ?? '';
+    if (t.isNotEmpty) {
+      final escaped = t
           .replaceAll('&', '&')
           .replaceAll('<', '<')
           .replaceAll('>', '>')
-          .replaceAll('\n', '<br>')
-          .replaceAll('  ', '&nbsp;&nbsp;');
-      return _wrapHtmlSnippet(escapedText);
+          .replaceAll('\r\n', '<br>')
+          .replaceAll('\n', '<br>');
+      return _buildHtmlTemplate('<div style="white-space: pre-wrap; word-wrap: break-word;">$escaped</div>');
     }
 
-    // 3. 如果什么内容都没有
-    return _wrapHtmlSnippet('邮件内容为空');
+    return _buildHtmlTemplate('<div style="color:#888;">邮件内容为空</div>');
   }
 
-  String _wrapHtmlSnippet(String content) {
-    // 构建完整的HTML文档
+  dom.Document _injectHeadMeta(dom.Document doc) {
+    var head = doc.querySelector('head');
+    if (head == null) {
+      head = dom.Element.tag('head');
+      doc.documentElement?.nodes.insert(0, head);
+    }
+
+    if (doc.querySelector('meta[name="viewport"]') == null) {
+      final viewport = dom.Element.tag('meta')
+        ..attributes['name'] = 'viewport'
+        ..attributes['content'] = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no';
+      head.append(viewport);
+    }
+
+    final style = dom.Element.tag('style')
+      ..text = '''
+        html, body { margin:0; padding:16px; }
+        img { max-width:100% !important; height:auto !important; }
+        body, table, td, th { word-wrap:break-word; overflow-wrap:anywhere; }
+      ''';
+    head.append(style);
+
+    return doc;
+  }
+
+  String _buildHtmlTemplate(String bodyContent) {
     return '''
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            font-size: 16px;
-            line-height: 1.6;
-            color: #333;
-            margin: 0;
-            padding: 16px;
-            background-color: transparent;
-            word-wrap: break-word;
-            overflow-wrap: break-word;
-        }
-        img {
-            max-width: 100% !important;
-            height: auto !important;
-            border-radius: 8px;
-            display: block;
-            margin: 8px 0;
-        }
-        a {
-            color: #007AFF;
-            text-decoration: none;
-        }
-        a:hover {
-            text-decoration: underline;
-        }
-        table {
-            width: 100% !important;
-            border-collapse: collapse;
-            margin: 16px 0;
-            table-layout: fixed;
-        }
-        th, td {
-            padding: 8px;
-            text-align: left;
-            border-bottom: 1px solid #ddd;
-            word-wrap: break-word;
-            overflow-wrap: break-word;
-        }
-        blockquote {
-            border-left: 4px solid #007AFF;
-            margin: 16px 0;
-            padding-left: 16px;
-            color: #666;
-        }
-        pre {
-            background-color: #f5f5f5;
-            padding: 16px;
-            border-radius: 8px;
-            overflow-x: auto;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-        }
-        code {
-            background-color: #f5f5f5;
-            padding: 2px 4px;
-            border-radius: 4px;
-            font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
-        }
-        /* 移动端优化 */
-        @media (max-width: 600px) {
-            body {
-                font-size: 14px;
-                padding: 12px;
-            }
-            table {
-                font-size: 12px;
-            }
-        }
-    </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <style>
+    html, body { margin:0; padding:16px; color:#222; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; }
+    img { max-width:100% !important; height:auto !important; display:block; border-radius: 8px; }
+    a { color:#0a84ff; text-decoration:none; }
+    a:hover { text-decoration:underline; }
+    table { max-width: 100%; border-collapse: collapse; margin: 16px 0; }
+    th, td { padding: 8px; text-align: left; }
+    body, table, td, th { word-wrap:break-word; overflow-wrap:anywhere; }
+    pre { background:#f6f7f8; padding:12px; border-radius:6px; overflow:auto; }
+    blockquote { margin:12px 0; padding-left:12px; border-left:3px solid #0a84ff33; color:#555; }
+  </style>
 </head>
 <body>
-    $content
+$bodyContent
 </body>
 </html>
-    ''';
+''';
   }
 
   void _showErrorSnack(String msg) {

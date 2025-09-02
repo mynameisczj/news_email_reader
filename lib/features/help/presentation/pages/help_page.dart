@@ -1,117 +1,82 @@
 import 'package:flutter/material.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../data/help_content_zh.dart';
+import '../data/help_content_en.dart';
 
-class HelpPage extends StatelessWidget {
+class HelpPage extends StatefulWidget {
   const HelpPage({super.key});
+
+  @override
+  State<HelpPage> createState() => _HelpPageState();
+}
+
+class _HelpPageState extends State<HelpPage> with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('帮助'),
+        title: const Text('帮助指南'),
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: AppTheme.primaryColor,
+          labelColor: AppTheme.primaryColor,
+          unselectedLabelColor: AppTheme.textSecondaryColor,
+          tabs: const [
+            Tab(text: '中文'),
+            Tab(text: 'English'),
+          ],
+        ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+      body: TabBarView(
+        controller: _tabController,
         children: [
-          _buildSection(
-            context,
-            '基本功能',
-            [
-              '• 查看邮件列表：在主页面可以看到所有新闻邮件',
-              '• 阅读邮件：点击邮件卡片进入详细阅读页面',
-              '• 搜索邮件：点击右上角搜索图标搜索邮件',
-              '• 收藏邮件：在邮件详情页点击星标收藏邮件',
-            ],
-          ),
-          const SizedBox(height: 24),
-          _buildSection(
-            context,
-            'AI功能',
-            [
-              '• AI总结：在邮件详情页点击"AI总结"按钮生成邮件摘要',
-              '• 批量总结：可以对多封邮件进行批量AI总结',
-              '• 自定义API：在设置中配置自己的AI服务API',
-            ],
-          ),
-          const SizedBox(height: 24),
-          _buildSection(
-            context,
-            '笔记功能',
-            [
-              '• 添加笔记：在邮件详情页可以为邮件添加个人笔记',
-              '• 查看笔记：通过侧边栏进入"我的笔记"查看所有笔记',
-              '• 编辑笔记：点击笔记可以进行编辑和修改',
-            ],
-          ),
-          const SizedBox(height: 24),
-          _buildSection(
-            context,
-            '收藏管理',
-            [
-              '• 收藏邮件：在邮件详情页点击星标图标收藏邮件',
-              '• 查看收藏：通过侧边栏进入"收藏邮件"查看所有收藏',
-              '• 取消收藏：在收藏页面或邮件详情页取消收藏',
-            ],
-          ),
-          const SizedBox(height: 24),
-          _buildSection(
-            context,
-            '设置选项',
-            [
-              '• 主题切换：在设置中可以切换浅色/深色主题',
-              '• 邮箱管理：添加和管理多个邮箱账户',
-              '• 白名单设置：设置发件人和关键词白名单',
-              '• AI配置：配置AI服务的API密钥和参数',
-            ],
-          ),
-          const SizedBox(height: 24),
-          _buildSection(
-            context,
-            '常见问题',
-            [
-              'Q: 如何添加邮箱账户？\nA: 进入设置 > 邮箱管理，点击添加按钮配置邮箱信息。',
-              'Q: AI总结功能无法使用？\nA: 请检查网络连接和AI服务配置，确保API密钥正确。',
-              'Q: 如何设置白名单？\nA: 进入设置 > 白名单管理，添加信任的发件人或关键词。',
-              'Q: 邮件无法同步？\nA: 检查邮箱配置和网络连接，确保邮箱服务正常。',
-            ],
-          ),
-          const SizedBox(height: 32),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.info_outline,
-                        color: Theme.of(context).primaryColor,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '联系我们',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  const Text('如果您遇到问题或有建议，欢迎联系我们：'),
-                  const SizedBox(height: 8),
-                  const Text('• 邮箱：support@newsreader.com'),
-                  const Text('• 版本：v0.2.1'),
-                ],
-              ),
-            ),
-          ),
+          _buildHelpContent(helpContentZh),
+          _buildHelpContent(helpContentEn),
         ],
       ),
     );
   }
 
-  Widget _buildSection(BuildContext context, String title, List<String> items) {
+  Widget _buildHelpContent(List<Map<String, dynamic>> content) {
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: content.length,
+      itemBuilder: (context, index) {
+        final section = content[index];
+        final bool isFaq = section['isFaq'] ?? false;
+
+        if (isFaq) {
+          return _buildFaqSection(context, section);
+        } else {
+          return _buildSection(context, section);
+        }
+      },
+    );
+  }
+
+  Widget _buildSection(BuildContext context, Map<String, dynamic> section) {
+    final title = section['title'] as String;
+    final content = section['content'] as String;
+    final points = section['points'] as List<String>?;
+
     return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -119,20 +84,73 @@ class HelpPage extends StatelessWidget {
           children: [
             Text(
               title,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.primaryColor,
+                  ),
             ),
             const SizedBox(height: 12),
-            ...items.map((item) => Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Text(
-                item,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-            )),
+            Text(
+              content,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    height: 1.5,
+                  ),
+            ),
+            if (points != null && points.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              ...points.map((point) => Padding(
+                    padding: const EdgeInsets.only(left: 8, bottom: 6),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('• ', style: TextStyle(color: AppTheme.primaryColor)),
+                        Expanded(child: Text(point, style: Theme.of(context).textTheme.bodyMedium)),
+                      ],
+                    ),
+                  )),
+            ],
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildFaqSection(BuildContext context, Map<String, dynamic> section) {
+    final title = section['title'] as String;
+    final faqs = section['faqs'] as List<Map<String, String>>;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ExpansionTile(
+        title: Text(
+          title,
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: AppTheme.primaryColor,
+              ),
+        ),
+        children: faqs.map((faq) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Q: ${faq['question']}',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'A: ${faq['answer']}',
+                  style: TextStyle(color: AppTheme.textSecondaryColor),
+                ),
+                const Divider(height: 20),
+              ],
+            ),
+          );
+        }).toList(),
       ),
     );
   }

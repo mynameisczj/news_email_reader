@@ -197,7 +197,7 @@ class _AppSettingsSectionState extends ConsumerState<AppSettingsSection> {
             _buildSettingsTile(
               icon: Icons.info,
               title: '版本信息',
-              subtitle: '极客新闻邮件阅读器 v0.3.0',
+              subtitle: '极客新闻邮件阅读器 v0.6.1',
               onTap: () {
                 _showAboutDialog(context);
               },
@@ -319,7 +319,7 @@ class _AppSettingsSectionState extends ConsumerState<AppSettingsSection> {
     showAboutDialog(
       context: context,
       applicationName: '极客新闻邮件阅读器',
-      applicationVersion: '0.2.1',
+      applicationVersion: '0.6.1',
       applicationIcon: Container(
         width: 64,
         height: 64,

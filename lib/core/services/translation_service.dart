@@ -549,7 +549,7 @@ class TranslationService {
             contentType: 'application/json',
             validateStatus: (status) => status != null && status < 500,
             headers: {
-              'User-Agent': 'NewsEmailReader/0.4.5',
+              'User-Agent': 'NewsEmailReader/0.6.1',
             },
           ),
         );

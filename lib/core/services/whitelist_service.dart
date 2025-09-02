@@ -52,12 +52,14 @@ class WhitelistService {
   }
 
   Future<List<WhitelistRule>> getSenderRules() async {
-    final rules = await getAllRules();
+    final rules = await _loadRules();
+    rules.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return rules.where((r) => r.type == WhitelistType.sender).toList();
   }
 
   Future<List<WhitelistRule>> getKeywordRules() async {
-    final rules = await getAllRules();
+    final rules = await _loadRules();
+    rules.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return rules.where((r) => r.type == WhitelistType.keyword).toList();
   }
 

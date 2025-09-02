@@ -184,6 +184,7 @@ class _WhitelistManagementSectionState extends ConsumerState<WhitelistManagement
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
+        onTap: () => _showEditRuleDialog(rule),
         leading: CircleAvatar(
           backgroundColor: rule.isActive ? AppTheme.primaryColor : AppTheme.textSecondaryColor,
           child: Icon(

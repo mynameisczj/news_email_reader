@@ -2,9 +2,10 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_windows/webview_windows.dart' as windows_webview;
-import 'package:url_launcher/url_launcher.dart';
+
 import 'package:share_plus/share_plus.dart';
 import 'package:html/parser.dart' show parse;
+import 'web_viewer_page.dart';
 import 'package:html/dom.dart' as dom;
 
 import '../../../../core/models/email_message.dart';
@@ -49,15 +50,15 @@ class _EmailReaderPageState extends State<EmailReaderPage> {
     if (Platform.isWindows) {
       await _windowsController.initialize();
       await _windowsController.loadStringContent(html);
-      _windowsController.url.listen((url) async {
+      _windowsController.url.listen((url) {
         if (url.startsWith('http')) {
           // 重新加载原始邮件以“阻止”导航
           _windowsController.loadStringContent(html);
-          // 在外部浏览器中打开链接
-          final uri = Uri.parse(url);
-          if (await canLaunchUrl(uri)) {
-            await launchUrl(uri, mode: LaunchMode.externalApplication);
-          }
+          // 在应用内打开链接
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => WebViewerPage(url: url)),
+          );
         }
       });
     } else {
@@ -68,12 +69,13 @@ class _EmailReaderPageState extends State<EmailReaderPage> {
             onPageFinished: (String url) {
               if (mounted) setState(() => _isWebViewLoading = false);
             },
-            onNavigationRequest: (NavigationRequest request) async {
+            onNavigationRequest: (NavigationRequest request) {
               if (request.url.startsWith('http')) {
-                final uri = Uri.parse(request.url);
-                if (await canLaunchUrl(uri)) {
-                  await launchUrl(uri, mode: LaunchMode.externalApplication);
-                }
+                // 在应用内打开链接
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => WebViewerPage(url: request.url)),
+                );
                 return NavigationDecision.prevent;
               }
               return NavigationDecision.navigate;

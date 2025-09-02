@@ -1,4 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'translation_service.dart';
 
 class SettingsService {
   static final SettingsService _instance = SettingsService._internal();
@@ -8,6 +9,8 @@ class SettingsService {
   static const String _keyAutoSummary = 'auto_summary';
   static const String _keyBatchSummary = 'batch_summary';
   static const String _keyNotifications = 'notifications';
+  static const String _keyTranslationProvider = 'translation_provider';
+  static const String _keyCustomTranslationApiUrl = 'custom_translation_api_url';
 
   static const String _keyDarkMode = 'dark_mode';
 
@@ -55,6 +58,31 @@ class SettingsService {
   Future<void> setDarkMode(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyDarkMode, value);
+  }
+
+  // 翻译服务设置
+  Future<TranslationProvider> getTranslationProvider() async {
+    final prefs = await SharedPreferences.getInstance();
+    final providerName = prefs.getString(_keyTranslationProvider);
+    return TranslationProvider.values.firstWhere(
+      (e) => e.name == providerName,
+      orElse: () => TranslationProvider.suapi,
+    );
+  }
+
+  Future<void> setTranslationProvider(TranslationProvider provider) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyTranslationProvider, provider.name);
+  }
+
+  Future<String> getCustomTranslationApiUrl() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyCustomTranslationApiUrl) ?? '';
+  }
+
+  Future<void> setCustomTranslationApiUrl(String url) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyCustomTranslationApiUrl, url);
   }
 
   // 邮件同步设置

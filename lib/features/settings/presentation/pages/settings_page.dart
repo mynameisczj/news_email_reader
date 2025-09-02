@@ -63,7 +63,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
           ),
           Tab(
             icon: Icon(Icons.auto_awesome),
-            text: 'AI设置',
+            text: 'AI与翻译',
           ),
           Tab(
             icon: Icon(Icons.sync),

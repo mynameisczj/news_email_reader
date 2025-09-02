@@ -5,10 +5,25 @@ import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'package:crypto/crypto.dart';
 
+enum TranslationProvider {
+  tencent('腾讯翻译'),
+  libre('LibreTranslate'),
+  suapi('SuApi'),
+  custom('自定义');
+
+  const TranslationProvider(this.displayName);
+  final String displayName;
+}
+
 class TranslationService {
   // 当未配置腾讯云密钥时，使用LibreTranslate公共实例
   String _libreBaseUrl = 'https://libretranslate.de';
   String? _libreApiKey;
+
+  // 当前使用的翻译服务提供商
+  TranslationProvider _provider = TranslationProvider.suapi;
+  String? _customApiUrl;
+
   static final TranslationService _instance = TranslationService._internal();
   factory TranslationService() => _instance;
   TranslationService._internal() {
@@ -24,25 +39,28 @@ class TranslationService {
     _dio.options.sendTimeout = const Duration(seconds: 15);
     
     // 配置SSL和证书验证
-    (_dio.httpClientAdapter as IOHttpClientAdapter).createHttpClient = () {
-      final client = HttpClient();
-      
-      // 配置SSL上下文
-      client.badCertificateCallback = (cert, host, port) {
-        // 对于LibreTranslate等服务，允许连接
-        return host.contains('libretranslate') || 
-               host.contains('translate') ||
-               host.contains('argosopentech') ||
-               host == 'libretranslate.de' ||
-               host == 'libretranslate.com';
+    if (!kIsWeb) {
+      (_dio.httpClientAdapter as IOHttpClientAdapter).createHttpClient = () {
+        final client = HttpClient();
+
+        // 配置SSL上下文
+        client.badCertificateCallback = (cert, host, port) {
+          // 对于LibreTranslate等服务，允许连接
+          return host.contains('libretranslate') ||
+              host.contains('translate') ||
+              host.contains('argosopentech') ||
+              host.contains('suapi.net') || // 允许SuApi
+              host == 'libretranslate.de' ||
+              host == 'libretranslate.com';
+        };
+
+        // 设置连接超时
+        client.connectionTimeout = const Duration(seconds: 15);
+        client.idleTimeout = const Duration(seconds: 15);
+
+        return client;
       };
-      
-      // 设置连接超时
-      client.connectionTimeout = const Duration(seconds: 15);
-      client.idleTimeout = const Duration(seconds: 15);
-      
-      return client;
-    };
+    }
     
     // 添加重试拦截器
     _dio.interceptors.add(
@@ -92,21 +110,69 @@ class TranslationService {
     _secretKey = secretKey;
   }
 
+  /// 设置翻译服务提供商
+  void setTranslationProvider(TranslationProvider provider, {String? customApiUrl}) {
+    _provider = provider;
+    _customApiUrl = customApiUrl;
+    // TODO: 将设置持久化
+  }
+
   /// 翻译文本
   Future<String> translateText({
     required String text,
     required String targetLanguage,
     String sourceLanguage = 'auto',
   }) async {
-    // 未配置腾讯云时，走免费LibreTranslate
-    if (!isConfigured()) {
-      return await _translateTextLibre(
-        text: text,
-        targetLanguage: targetLanguage,
-        sourceLanguage: sourceLanguage,
-      );
+    switch (_provider) {
+      case TranslationProvider.tencent:
+        if (isConfigured()) {
+          return await _translateTextTencent(
+            text: text,
+            targetLanguage: targetLanguage,
+            sourceLanguage: sourceLanguage,
+          );
+        }
+        debugPrint('腾讯翻译未配置，回退到SuApi');
+        return await _translateTextSuApi(
+          text: text,
+          targetLanguage: targetLanguage,
+          sourceLanguage: sourceLanguage,
+        );
+      case TranslationProvider.libre:
+        return await _translateTextLibre(
+          text: text,
+          targetLanguage: targetLanguage,
+          sourceLanguage: sourceLanguage,
+        );
+      case TranslationProvider.suapi:
+        return await _translateTextSuApi(
+          text: text,
+          targetLanguage: targetLanguage,
+          sourceLanguage: sourceLanguage,
+        );
+      case TranslationProvider.custom:
+        if (_customApiUrl != null && _customApiUrl!.isNotEmpty) {
+          return await _translateTextSuApi(
+            text: text,
+            targetLanguage: targetLanguage,
+            sourceLanguage: sourceLanguage,
+            baseUrl: _customApiUrl,
+          );
+        }
+        debugPrint('自定义翻译API未配置，回退到SuApi');
+        return await _translateTextSuApi(
+          text: text,
+          targetLanguage: targetLanguage,
+          sourceLanguage: sourceLanguage,
+        );
     }
+  }
 
+  Future<String> _translateTextTencent({
+    required String text,
+    required String targetLanguage,
+    String sourceLanguage = 'auto',
+  }) async {
     try {
       final timestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       final headers = _generateHeaders(text, targetLanguage, sourceLanguage, timestamp);
@@ -147,8 +213,25 @@ class TranslationService {
     required String targetLanguage,
     String sourceLanguage = 'auto',
   }) async {
+    if (texts.isEmpty) {
+      return [];
+    }
+
+    // SuApi 和 自定义Api 支持批量翻译
+    if (_provider == TranslationProvider.suapi ||
+        (_provider == TranslationProvider.custom &&
+            _customApiUrl != null &&
+            _customApiUrl!.isNotEmpty)) {
+      return await _translateBatchSuApi(
+        texts: texts,
+        targetLanguage: targetLanguage,
+        sourceLanguage: sourceLanguage,
+        baseUrl: _provider == TranslationProvider.custom ? _customApiUrl : null,
+      );
+    }
+
+    // 其他翻译服务，循环调用单次翻译
     final results = <String>[];
-    
     for (final text in texts) {
       try {
         final translated = await translateText(
@@ -158,11 +241,10 @@ class TranslationService {
         );
         results.add(translated);
       } catch (e) {
-        // 如果翻译失败，返回原文
-        results.add(text);
+        debugPrint('批量翻译中，单条翻译失败: $e');
+        results.add(text); // 如果翻译失败，返回原文
       }
     }
-    
     return results;
   }
 
@@ -174,24 +256,87 @@ class TranslationService {
     String sourceLanguage = 'auto',
   }) async {
     try {
-      final translatedSubject = await translateText(
-        text: subject,
+      if (subject.trim().isEmpty && content.trim().isEmpty) {
+        return {'subject': subject, 'content': content};
+      }
+      final textsToTranslate = [subject, content];
+      final translated = await translateBatch(
+        texts: textsToTranslate,
         targetLanguage: targetLanguage,
         sourceLanguage: sourceLanguage,
       );
-      
-      final translatedContent = await translateText(
-        text: content,
-        targetLanguage: targetLanguage,
-        sourceLanguage: sourceLanguage,
-      );
-      
-      return {
-        'subject': translatedSubject,
-        'content': translatedContent,
-      };
+      return {'subject': translated[0], 'content': translated[1]};
     } catch (e) {
       throw Exception('邮件翻译失败: $e');
+    }
+  }
+
+  // ========== SuApi Translation =========
+  Future<String> _translateTextSuApi({
+    required String text,
+    required String targetLanguage,
+    String sourceLanguage = 'auto',
+    String? baseUrl,
+  }) async {
+    final results = await _translateBatchSuApi(
+      texts: [text],
+      targetLanguage: targetLanguage,
+      sourceLanguage: sourceLanguage,
+      baseUrl: baseUrl,
+    );
+    return results.isNotEmpty ? results.first : text;
+  }
+
+  Future<List<String>> _translateBatchSuApi({
+    required List<String> texts,
+    required String targetLanguage,
+    String sourceLanguage = 'auto',
+    String? baseUrl,
+  }) async {
+    final apiUrl = baseUrl ?? 'https://suapi.net/api/text/translate';
+    debugPrint('使用SuApi翻译: $apiUrl');
+
+    try {
+      final response = await _dio.get(
+        apiUrl,
+        queryParameters: {
+          'to': targetLanguage,
+          'text[]': texts,
+        },
+        options: Options(
+          contentType: 'application/json',
+          validateStatus: (status) => status != null && status < 500,
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        final result = response.data;
+        if (result is Map && result['code'] == 200 && result['data'] is List) {
+          final dataList = result['data'] as List;
+          final translatedTexts = <String>[];
+
+          for (int i = 0; i < dataList.length; i++) {
+            final item = dataList[i];
+            if (item['translations'] is List &&
+                (item['translations'] as List).isNotEmpty) {
+              translatedTexts.add(item['translations'][0]['text'] ?? texts[i]);
+            } else {
+              translatedTexts.add(texts[i]);
+            }
+          }
+
+          if (translatedTexts.length == texts.length) {
+            return translatedTexts;
+          }
+        }
+        if (result is Map && result['msg'] != null) {
+          throw Exception('翻译失败: ${result['msg']}');
+        }
+      }
+      throw Exception('翻译请求失败: ${response.statusCode}, ${response.data}');
+    } catch (e) {
+      debugPrint('SuApi翻译服务错误: $e');
+      return texts;
     }
   }
 
@@ -271,7 +416,7 @@ class TranslationService {
       'ProjectId': 0,
     });
 
-    return _generateCommonHeaders(payload, timestamp);
+    return _generateCommonHeaders(payload, timestamp, _action);
   }
 
   /// 生成语言检测请求头
@@ -283,11 +428,12 @@ class TranslationService {
       'Text': text,
     });
 
-    return _generateCommonHeaders(payload, timestamp);
+    return _generateCommonHeaders(payload, timestamp, 'LanguageDetect');
   }
 
   /// 生成通用请求头
-  Map<String, String> _generateCommonHeaders(String payload, int timestamp) {
+  Map<String, String> _generateCommonHeaders(
+      String payload, int timestamp, String action) {
     final date = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000).toUtc();
     final dateString = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
     
@@ -305,7 +451,7 @@ class TranslationService {
       'Authorization': authorization,
       'Content-Type': 'application/json',
       'Host': 'tmt.tencentcloudapi.com',
-      'X-TC-Action': _action,
+      'X-TC-Action': action,
       'X-TC-Timestamp': timestamp.toString(),
       'X-TC-Version': _version,
       'X-TC-Region': _region,
@@ -418,10 +564,10 @@ class TranslationService {
           await Future.delayed(const Duration(seconds: 1)); // 短暂延迟
           continue;
         } else {
-          throw DioException(
+          throw DioException.badResponse(
+            statusCode: response.statusCode ?? 500,
             requestOptions: response.requestOptions,
             response: response,
-            message: 'HTTP ${response.statusCode}',
           );
         }
       } catch (e) {
@@ -451,24 +597,37 @@ class TranslationService {
   }
 
   Future<String> _detectLanguageLibre(String text) async {
-    try {
-      final response = await _dio.post(
-        '$_libreBaseUrl/detect',
-        data: {'q': text},
-        options: Options(contentType: 'application/json'),
-      );
-      if (response.statusCode == 200) {
-        final res = response.data;
-        if (res is List && res.isNotEmpty) {
-          final first = res.first;
-          final lang = first['language'] as String?;
-          return lang ?? 'auto';
+    final fallbackUrls = [
+      'https://translate.argosopentech.com',
+      'https://libretranslate.de',
+      'https://libretranslate.com',
+    ];
+
+    for (final baseUrl in fallbackUrls) {
+      try {
+        final response = await _dio.post(
+          '$baseUrl/detect',
+          data: {
+            'q': text.length > 500 ? text.substring(0, 500) : text
+          }, // 限制长度
+          options: Options(contentType: 'application/json'),
+        );
+        if (response.statusCode == 200) {
+          final res = response.data;
+          if (res is List && res.isNotEmpty) {
+            final first = res.first;
+            final lang = first['language'] as String?;
+            if (lang != null && lang.isNotEmpty) {
+              return lang;
+            }
+          }
         }
+      } catch (e) {
+        debugPrint('LibreTranslate language detect $baseUrl 失败: $e');
+        continue; // 尝试下一个
       }
-      return 'auto';
-    } catch (_) {
-      return 'auto';
     }
+    return 'auto'; // 所有服务失败后返回 'auto'
   }
 
   /// 清除API配置

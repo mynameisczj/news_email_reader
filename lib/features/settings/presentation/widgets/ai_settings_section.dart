@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/services/ai_service.dart';
 import '../../../../core/services/settings_service.dart';
+import '../../../../core/services/translation_service.dart';
 
 class AISettingsSection extends ConsumerStatefulWidget {
   const AISettingsSection({super.key});
@@ -14,7 +15,9 @@ class AISettingsSection extends ConsumerStatefulWidget {
 class _AISettingsSectionState extends ConsumerState<AISettingsSection> {
   final AIService _aiService = AIService();
   final SettingsService _settingsService = SettingsService();
-  
+  final TranslationService _translationService = TranslationService();
+
+  // AI Summary settings
   String _selectedProvider = 'suanli';
   String _apiKey = '';
   String _baseUrl = 'https://api.suanli.cn/v1';
@@ -24,11 +27,16 @@ class _AISettingsSectionState extends ConsumerState<AISettingsSection> {
   bool _autoSummary = true;
   bool _batchSummary = false;
 
+  // Translation settings
+  TranslationProvider _selectedTranslationProvider = TranslationProvider.suapi;
+  String _customTranslationApiUrl = '';
+
   @override
   void initState() {
     super.initState();
     _loadSettings();
     _loadSwitchSettings();
+    _loadTranslationSettings();
   }
 
   Future<void> _loadSwitchSettings() async {
@@ -39,6 +47,17 @@ class _AISettingsSectionState extends ConsumerState<AISettingsSection> {
       _autoSummary = autoSummary;
       _batchSummary = batchSummary;
     });
+  }
+
+  Future<void> _loadTranslationSettings() async {
+    final provider = await _settingsService.getTranslationProvider();
+    final customUrl = await _settingsService.getCustomTranslationApiUrl();
+    if (!mounted) return;
+    setState(() {
+      _selectedTranslationProvider = provider;
+      _customTranslationApiUrl = customUrl;
+    });
+    _updateTranslationProvider();
   }
 
   Future<void> _loadSettings() async {
@@ -61,6 +80,8 @@ class _AISettingsSectionState extends ConsumerState<AISettingsSection> {
         _buildTestSection(),
         const SizedBox(height: 24),
         _buildUsageSection(),
+        const SizedBox(height: 24),
+        _buildTranslationSettingsSection(),
       ],
     );
   }
@@ -273,6 +294,56 @@ class _AISettingsSectionState extends ConsumerState<AISettingsSection> {
     );
   }
 
+  Widget _buildTranslationSettingsSection() {
+    return _buildSettingsGroup(
+      title: '翻译设置',
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: DropdownButtonFormField<TranslationProvider>(
+            value: _selectedTranslationProvider,
+            decoration: const InputDecoration(
+              labelText: '翻译服务提供商',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.translate),
+            ),
+            items: TranslationProvider.values.map((provider) {
+              return DropdownMenuItem<TranslationProvider>(
+                value: provider,
+                child: Text(provider.displayName),
+              );
+            }).toList(),
+            onChanged: (TranslationProvider? newValue) {
+              if (newValue != null) {
+                setState(() {
+                  _selectedTranslationProvider = newValue;
+                  _updateTranslationProvider();
+                });
+              }
+            },
+          ),
+        ),
+        if (_selectedTranslationProvider == TranslationProvider.custom)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: TextField(
+              decoration: const InputDecoration(
+                labelText: '自定义翻译API地址',
+                hintText: 'https://api.example.com/translate',
+                prefixIcon: Icon(Icons.link),
+              ),
+              onChanged: (value) {
+                _customTranslationApiUrl = value;
+                _updateTranslationProvider();
+              },
+              controller:
+                  TextEditingController(text: _customTranslationApiUrl),
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _buildSettingsGroup({
     required String title,
     required List<Widget> children,
@@ -319,6 +390,17 @@ class _AISettingsSectionState extends ConsumerState<AISettingsSection> {
         break;
     }
     setState(() {});
+  }
+
+  void _updateTranslationProvider() {
+    _translationService.setTranslationProvider(
+      _selectedTranslationProvider,
+      customApiUrl: _customTranslationApiUrl,
+    );
+    _settingsService.setTranslationProvider(_selectedTranslationProvider);
+    if (_selectedTranslationProvider == TranslationProvider.custom) {
+      _settingsService.setCustomTranslationApiUrl(_customTranslationApiUrl);
+    }
   }
 
   Future<void> _testConnection() async {

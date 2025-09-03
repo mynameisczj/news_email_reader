@@ -1,5 +1,11 @@
 # 新闻邮件阅读器 News Email Reader
 
+[![Flutter](https://camo.githubusercontent.com/031659092e85df76a0ab830ef77631a750b67d379b29c24f7969ccbc2829743a/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f466c75747465722d3032353639423f7374796c653d666f722d7468652d6261646765266c6f676f3d666c7574746572266c6f676f436f6c6f723d7768697465)](https://camo.githubusercontent.com/031659092e85df76a0ab830ef77631a750b67d379b29c24f7969ccbc2829743a/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f466c75747465722d3032353639423f7374796c653d666f722d7468652d6261646765266c6f676f3d666c7574746572266c6f676f436f6c6f723d7768697465) [![Dart](https://camo.githubusercontent.com/7fb208b1c3ee5e1e0d541017c61c94f8070ce9509820f8f2f3a82191d240f0e2/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f446172742d3031373543323f7374796c653d666f722d7468652d6261646765266c6f676f3d64617274266c6f676f436f6c6f723d7768697465)](https://camo.githubusercontent.com/7fb208b1c3ee5e1e0d541017c61c94f8070ce9509820f8f2f3a82191d240f0e2/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f446172742d3031373543323f7374796c653d666f722d7468652d6261646765266c6f676f3d64617274266c6f676f436f6c6f723d7768697465) [![License](https://camo.githubusercontent.com/d3c05b2f5574921acb53a3b5a562bcf33472f35b2714a0ec9affd1e7811cfa69/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f4c6963656e73652d4d49542d677265656e2e7376673f7374796c653d666f722d7468652d6261646765)](https://camo.githubusercontent.com/d3c05b2f5574921acb53a3b5a562bcf33472f35b2714a0ec9affd1e7811cfa69/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f4c6963656e73652d4d49542d677265656e2e7376673f7374796c653d666f722d7468652d6261646765)
+
+> 本项目为蒟蒻计算机学生学习flutter时使用大量ai工具缝合出来的拼好App，有大量问题且不定时维护，请谨慎使用。
+>
+> 如果您愿意的话，可以直接修改本项目并自行分发。对于本项目而言，pr比issue有用（）。
+
 **新闻邮件阅读器**是一款专为高效阅读和管理新闻类邮件而设计的开源 Flutter 应用。它集成了 AI 智能服务、笔记系统和强大的自定义功能，旨在提供一个纯净、无干扰的阅读体验。
 
 ## ✨ 功能特性
@@ -22,10 +28,13 @@
 
 ## 🚀 安装指南
 
+请访问本项目的[releases](https://github.com/AullChen/news_email_reader/releases)界面，或：
+
 1.  **环境准备**:
+    
     - 确保您已安装 [Flutter SDK](https://flutter.dev/docs/get-started/install) (版本 >= 3.0.0)。
     - 配置好您的开发环境 (如 Android Studio, VS Code)。
-
+    
 2.  **克隆项目**:
     ```bash
     git clone https://github.com/your-username/news_email_reader.git
@@ -60,6 +69,30 @@
 - **白名单管理**: 添加或移除信任的发件人邮箱地址。
 - **外观**: 切换浅色/深色主题。
 
----
+## 🤝 如何贡献
 
-感谢您的使用！如果您有任何问题或建议，欢迎提交 Issue。
+我们欢迎任何形式的贡献！请阅读我们的 [CONTRIBUTING.md](https://github.com/AullChen/news_email_reader/blob/main/CONTRIBUTING.md) 文件，了解如何参与改进这个项目。
+
+## 📄 开源许可
+
+本项目采用 MIT 许可证。详情请见 [LICENSE](https://github.com/AullChen/news_email_reader/blob/main/LICENSE) 文件。
+
+## 🙏 致谢
+
+- [CodeBuddy](https://www.codebuddy.ai/) - IDE
+- [Claude AI](https://www.anthropic.com/) [OpenAI](https://openai.com/) [Gemini](https://gemini.google.com/) - 代码助手
+- [Flutter](https://flutter.dev/) - 跨平台UI框架
+- [Free-QWQ](https://qwq.aigpu.cn/) - 免费无限制分布式AI算力平台——提供本项目的默认大模型API
+- [通用翻译免费API](https://api.aa1.cn/doc/translates.html) - 免费接口调用平台，提供本项目的默认翻译API
+
+## 📞 联系方式
+
+- **项目主页**: [GitHub Repository](https://github.com/AullChen/news_email_reader)
+- **问题反馈**: [Issues](https://github.com/AullChen/news_email_reader/issues)
+- **功能建议**: [Discussions](https://github.com/AullChen/news_email_reader/discussions)
+
+------
+
+如果这个项目对您有帮助、使您感兴趣或者给您带来了欢乐，请给我们一个 ⭐️
+
+Made with ❤️ by AullChen

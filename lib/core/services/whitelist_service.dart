@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/whitelist_rule.dart';
 import '../models/email_message.dart';
@@ -15,9 +16,35 @@ class WhitelistService {
   static const String _rulesKey = 'whitelist_rules';
 
   Future<List<WhitelistRule>> _loadRules() async {
-    final jsonStr = await _storage.getString(_rulesKey, defaultValue: '[]');
+    final jsonStr = await _storage.getString(_rulesKey);
+    if (jsonStr == null || jsonStr.isEmpty || jsonStr == '[]') {
+      return _loadDefaultRules();
+    }
     final List list = json.decode(jsonStr);
     return list.map((e) => WhitelistRule.fromMap(Map<String, dynamic>.from(e))).toList();
+  }
+
+  Future<List<WhitelistRule>> _loadDefaultRules() async {
+    try {
+      final jsonString = await rootBundle.loadString('assets/default_whitelist_rules.json');
+      final data = json.decode(jsonString) as Map<String, dynamic>;
+      final rulesData = data['rules'] as List<dynamic>?;
+
+      if (rulesData == null) {
+        return [];
+      }
+
+      final rules = rulesData.map((ruleData) {
+        final ruleMap = Map<String, dynamic>.from(ruleData);
+        return WhitelistRule.fromMap(ruleMap);
+      }).toList();
+
+      await _saveRules(rules);
+      return rules;
+    } catch (e) {
+      debugPrint('Failed to load default whitelist rules: $e');
+      return [];
+    }
   }
 
   Future<void> _saveRules(List<WhitelistRule> rules) async {

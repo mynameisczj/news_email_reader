@@ -935,7 +935,7 @@ class _HomePageState extends ConsumerState<HomePage> with TickerProviderStateMix
                   ),
                 ),
                 Text(
-                  'v0.6.1',
+                  'v1.0.0',
                   style: TextStyle(
                     color: Colors.white70,
                     fontSize: 14,
@@ -1023,7 +1023,7 @@ class _HomePageState extends ConsumerState<HomePage> with TickerProviderStateMix
     showAboutDialog(
       context: context,
       applicationName: '新闻邮件阅读器',
-      applicationVersion: '0.6.1',
+      applicationVersion: '1.0.0',
       applicationIcon: Container(
         width: 64,
         height: 64,

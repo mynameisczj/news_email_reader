@@ -124,7 +124,7 @@ class EmailService {
 
       // 获取服务器邮件总数，POP3 按索引 1..N
       final status = await client.status();
-      final total = status?.numberOfMessages ?? 0;
+      final total = status.numberOfMessages ?? 0;
       if (total == 0) {
         return <EmailMessage>[];
       }

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'privacy_policy_page.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/services/settings_service.dart';
 import '../../../../core/services/storage_service.dart';
@@ -197,17 +199,20 @@ class _AppSettingsSectionState extends ConsumerState<AppSettingsSection> {
             _buildSettingsTile(
               icon: Icons.info,
               title: '版本信息',
-              subtitle: '极客新闻邮件阅读器 v0.6.1',
+              subtitle: '极客新闻邮件阅读器 v1.0.0',
               onTap: () {
                 _showAboutDialog(context);
               },
             ),
             _buildSettingsTile(
               icon: Icons.help,
-              title: '帮助与反馈',
-              subtitle: '使用帮助和问题反馈',
-              onTap: () {
-                // TODO: 打开帮助页面
+              title: '反馈',
+              subtitle: '使用中出现的的问题反馈',
+              onTap: () async {
+                final url = Uri.parse('https://github.com/AullChen/news_email_reader/issues/new');
+                if (!await launchUrl(url)) {
+                  throw Exception('Could not launch $url');
+                }
               },
             ),
             _buildSettingsTile(
@@ -215,7 +220,23 @@ class _AppSettingsSectionState extends ConsumerState<AppSettingsSection> {
               title: '隐私政策',
               subtitle: '查看隐私政策',
               onTap: () {
-                // TODO: 打开隐私政策
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const PrivacyPolicyPage(),
+                  ),
+                );
+              },
+            ),
+            _buildSettingsTile(
+              icon: Icons.telegram,
+              title: '联系作者',
+              subtitle: '通过直接访问本项目的仓库',
+              onTap: () async {
+                final url = Uri.parse('https://github.com/AullChen/news_email_reader/');
+                if (!await launchUrl(url)) {
+                  throw Exception('Could not launch $url');
+                }
               },
             ),
           ],
@@ -319,7 +340,7 @@ class _AppSettingsSectionState extends ConsumerState<AppSettingsSection> {
     showAboutDialog(
       context: context,
       applicationName: '极客新闻邮件阅读器',
-      applicationVersion: '0.6.1',
+      applicationVersion: '1.0.0',
       applicationIcon: Container(
         width: 64,
         height: 64,

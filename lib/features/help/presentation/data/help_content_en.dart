@@ -1,5 +1,9 @@
 const List<Map<String, dynamic>> helpContentEn = [
   {
+    'title': 'Write at the beginning',
+    'content': 'This project is merely a learning project developed by a novice computer science student, aimed at learning Flutter and improving the experience of reading news emails. Therefore, the project has many issues; please use it with caution.',
+  },
+  {
     'title': 'Foreword',
     'content': 'Welcome to the world of newsletters! Whether you want to gain industry insights, learn new knowledge, or just discover interesting content, newsletters are an excellent source of information. This guide will take you from scratch to easily get started with subscribing to and reading newsletters.',
   },
@@ -45,20 +49,24 @@ const List<Map<String, dynamic>> helpContentEn = [
     'isFaq': true,
     'faqs': [
       {
-        'question': 'How to add an email account?',
-        'answer': 'Go to "Settings" > "Accounts", click the "Add Account" button, and then enter your email address and password (or app-specific password) as prompted.'
+        'question': 'How do I add an email account?',
+        'answer': 'Go to “Settings” > “Accounts”, click the “Add Account” button, then enter your email address and password or authorization code as prompted. We recommend using authorization codes or similar methods for better security of your email account.'
       },
       {
-        'question': 'AI summary or translation feature not working?',
-        'answer': 'Please check your network connection. If the network is fine, go to "Settings" > "AI Settings" and check if the configuration of the AI service provider is correct, especially the API key and custom API address.'
+        'question': 'Why isn’t the AI summary or translation feature working?',
+        'answer': 'Please check your network connection. If the network is fine, it’s likely because this app uses public APIs, which are free but also extremely unstable. For a better experience, go to “Settings” > “AI Settings” and input your own AI service provider configuration, including the API key and custom API URL.'
       },
       {
-        'question': 'How to set up a whitelist?',
-        'answer': 'Go to "Settings" > "Whitelist", where you can add specific sender emails or domains to ensure their emails are not filtered.'
+        'question': 'How do I set up a whitelist?',
+        'answer': 'Go to “Settings” > “Whitelist”, where you can add specific sender email addresses or domains to ensure their emails won’t be filtered out. We provide some default whitelist entries, but since everyone’s needs vary, you’ll likely need to customize the whitelist yourself.'
       },
       {
-        'question': 'Emails not syncing or not receiving new emails?',
-        'answer': 'First, please check your network connection. Second, confirm that your email configuration is correct in "Settings" > "Accounts". Finally, try pulling down to manually refresh the email list.'
+        'question': 'Emails won’t sync or I’m not receiving new emails?',
+        'answer': 'First, check your network connection. Then, verify your email configuration under “Settings” > “Accounts”. Finally, try manually pulling down to refresh the email list.'
+      },
+      {
+        'question': 'Other questions?',
+        'answer': 'This project was developed during undergraduate studies as a learning exercise and still has many imperfections. If you have any questions, feel free to submit an [issue](https://github.com/AullChen/news_email_reader/issues/new), or directly submit a [pull request](https://github.com/AullChen/news_email_reader/pulls).'
       }
     ]
   }

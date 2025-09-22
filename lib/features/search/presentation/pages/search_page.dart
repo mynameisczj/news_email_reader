@@ -137,27 +137,27 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   }
 
   Widget _buildNoResults() {
-    return Center(
+    return const Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(
+          Icon(
             Icons.search_off,
             size: 64,
             color: AppTheme.textSecondaryColor,
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           Text(
             '未找到相关邮件',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 18,
               color: AppTheme.textSecondaryColor,
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           Text(
             '尝试使用其他关键词搜索',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
               color: AppTheme.textSecondaryColor,
             ),

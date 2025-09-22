@@ -1,3 +1,5 @@
+// ignore_for_file: valid_regexps
+
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:enough_mail/enough_mail.dart';
@@ -24,14 +26,16 @@ class EmailService {
     try {
       if (protocol == 'IMAP') {
         final client = ImapClient(isLogEnabled: false);
-        await client.connectToServer(account.serverHost, account.serverPort, isSecure: account.useSsl);
+        await client.connectToServer(account.serverHost, account.serverPort,
+            isSecure: account.useSsl);
         await client.login(account.email, account.password);
         await client.logout();
         await client.disconnect();
         return true;
       } else if (protocol == 'POP3') {
         final client = PopClient(isLogEnabled: false);
-        await client.connectToServer(account.serverHost, account.serverPort, isSecure: account.useSsl);
+        await client.connectToServer(account.serverHost, account.serverPort,
+            isSecure: account.useSsl);
         await client.login(account.email, account.password);
         await client.quit();
         await client.disconnect();
@@ -63,7 +67,7 @@ class EmailService {
     final protocol = account.protocol.toUpperCase();
     // 默认获取更多邮件，确保能覆盖被清理的邮件
     final fetchCount = count ?? 2000;
-    
+    debugPrint('fetchRecentEmails call');
     if (protocol == 'IMAP') {
       return _fetchImapRecent(account, count: fetchCount);
     } else if (protocol == 'POP3') {
@@ -74,12 +78,27 @@ class EmailService {
   }
 
   // 使用 enough_mail 的便捷方法获取最近邮件
-  Future<List<EmailMessage>> _fetchImapRecent(EmailAccount account, {int count = 1000}) async {
+  Future<List<EmailMessage>> _fetchImapRecent(EmailAccount account,
+      {int count = 1000}) async {
     final client = ImapClient(isLogEnabled: false);
+    debugPrint('_fetchImapRecent call');
     try {
-      await client.connectToServer(account.serverHost, account.serverPort, isSecure: account.useSsl);
+      await client.connectToServer(account.serverHost, account.serverPort,
+          isSecure: account.useSsl);
+      debugPrint('connect OK');
+      if (!client.isConnected) {
+        debugPrint('连接已断开，重新登录...');
+        await client.connectToServer(account.serverHost, account.serverPort,
+            isSecure: account.useSsl);
+      }
       await client.login(account.email, account.password);
+      debugPrint('login OK');
+
+      final mailboxes = await client.listMailboxes();
+      debugPrint('可用邮箱: ${mailboxes.map((m) => m.name).toList()}');
+
       await client.selectInbox();
+      debugPrint('selectInbox OK');
 
       // 使用便捷方法抓取最近邮件（返回 FetchImapResult，其中包含 messages）
       final fetch = await client.fetchRecentMessages(messageCount: count);
@@ -116,15 +135,17 @@ class EmailService {
     }
   }
 
-  Future<List<EmailMessage>> _fetchPop3Recent(EmailAccount account, {int count = 1000}) async {
+  Future<List<EmailMessage>> _fetchPop3Recent(EmailAccount account,
+      {int count = 1000}) async {
     final client = PopClient(isLogEnabled: false);
     try {
-      await client.connectToServer(account.serverHost, account.serverPort, isSecure: account.useSsl);
+      await client.connectToServer(account.serverHost, account.serverPort,
+          isSecure: account.useSsl);
       await client.login(account.email, account.password);
 
       // 获取服务器邮件总数，POP3 按索引 1..N
       final status = await client.status();
-      final total = status.numberOfMessages ?? 0;
+      final total = status.numberOfMessages;
       if (total == 0) {
         return <EmailMessage>[];
       }
@@ -134,14 +155,12 @@ class EmailService {
       for (int i = total; i > total - fetchCount; i--) {
         try {
           final mime = await client.retrieve(i);
-          if (mime != null) {
-            // POP3 无 UID，构造一个确定性的 fallback
-            result.add(_mimeToEmailMessage(
-              mime,
-              account,
-              messageIdFallback: 'pop3_${account.email}_$i',
-            ));
-          }
+          // POP3 无 UID，构造一个确定性的 fallback
+          result.add(_mimeToEmailMessage(
+            mime,
+            account,
+            messageIdFallback: 'pop3_${account.email}_$i',
+          ));
         } catch (e) {
           // ignore: avoid_print
           debugPrint('POP3 retrieve index=$i error: $e');
@@ -183,7 +202,8 @@ class EmailService {
       html = mime.decodeTextHtmlPart();
 
       // 如果两者都为空，则设置一个占位符
-      if ((text == null || text.trim().isEmpty) && (html == null || html.trim().isEmpty)) {
+      if ((text == null || text.trim().isEmpty) &&
+          (html == null || html.trim().isEmpty)) {
         text = '(无内容)';
       }
     } catch (e) {
@@ -193,13 +213,14 @@ class EmailService {
     }
 
     // 优先使用邮件头中的 Message-ID，如果不存在，则生成一个确定性的 ID
-    final String messageId = mime.getHeaderValue('Message-ID') ?? _deterministicMessageId(
-      account.email,
-      senderEmail,
-      date,
-      subject,
-      messageIdFallback,
-    );
+    final String messageId = mime.getHeaderValue('Message-ID') ??
+        _deterministicMessageId(
+          account.email,
+          senderEmail,
+          date,
+          subject,
+          messageIdFallback,
+        );
 
     return EmailMessage(
       accountId: account.id ?? 0,
@@ -225,10 +246,12 @@ class EmailService {
     String seed,
   ) {
     // 将时间戳舍入到分钟级别，以避免微秒差异
-    final roundedDate = DateTime(date.year, date.month, date.day, date.hour, date.minute);
+    final roundedDate =
+        DateTime(date.year, date.month, date.day, date.hour, date.minute);
     final subjectHash = _stableHash(subject);
     final seedHash = _stableHash(seed.toString());
-    final base = 'msg_${accountEmail}_${senderEmail}_${roundedDate.millisecondsSinceEpoch}_${subjectHash}_${seedHash}';
+    final base =
+        'msg_${accountEmail}_${senderEmail}_${roundedDate.millisecondsSinceEpoch}_${subjectHash}_$seedHash';
     return base.replaceAll(RegExp(r'[^A-Za-z0-9_\\-@.]'), '_');
   }
 

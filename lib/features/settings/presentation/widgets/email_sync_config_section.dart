@@ -280,16 +280,16 @@ class _EmailSyncConfigSectionState extends ConsumerState<EmailSyncConfigSection>
   String _getSyncConfigSummary() {
     final countText = _syncEmailCount == 0 
         ? '全部邮件' 
-        : '最近${_syncEmailCount}封邮件';
+        : '最近$_syncEmailCount封邮件';
     
     final timeText = _syncTimeRangeDays == 0 
         ? '全部时间' 
-        : '最近${_syncTimeRangeDays}天';
+        : '最近$_syncTimeRangeDays天';
     
     final autoText = _autoSyncEnabled 
         ? (_syncIntervalMinutes == 0 
             ? '仅启动时自动同步' 
-            : '每${_syncIntervalMinutes}分钟自动同步')
+            : '每$_syncIntervalMinutes分钟自动同步')
         : '仅手动同步';
     
     return '同步范围: $countText ($timeText)\n同步方式: $autoText';

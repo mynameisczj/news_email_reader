@@ -233,7 +233,7 @@ class _HomePageState extends ConsumerState<HomePage> with TickerProviderStateMix
               ),
               const SizedBox(height: 8),
               Text(
-                '${_currentAccountIndex}/$_totalAccounts',
+                '$_currentAccountIndex/$_totalAccounts',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
@@ -404,7 +404,7 @@ class _HomePageState extends ConsumerState<HomePage> with TickerProviderStateMix
     }
 
     if (_emails.isEmpty && !_isLoading) {
-      return Center(
+      return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -413,7 +413,7 @@ class _HomePageState extends ConsumerState<HomePage> with TickerProviderStateMix
               size: 64,
               color: AppTheme.textSecondaryColor,
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             Text(
               '暂无邮件',
               style: TextStyle(
@@ -421,7 +421,7 @@ class _HomePageState extends ConsumerState<HomePage> with TickerProviderStateMix
                 color: AppTheme.textSecondaryColor,
               ),
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: 8),
             Text(
               '下拉刷新或检查账户设置',
               style: TextStyle(
@@ -492,7 +492,7 @@ class _HomePageState extends ConsumerState<HomePage> with TickerProviderStateMix
                           ),
                           Text(
                             email.senderEmail,
-                            style: TextStyle(
+                            style: const TextStyle(
                               color: AppTheme.textSecondaryColor,
                               fontSize: 12,
                             ),
@@ -502,7 +502,7 @@ class _HomePageState extends ConsumerState<HomePage> with TickerProviderStateMix
                     ),
                     Text(
                       _formatTime(email.receivedDate),
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: AppTheme.textSecondaryColor,
                         fontSize: 12,
                       ),
@@ -543,7 +543,7 @@ class _HomePageState extends ConsumerState<HomePage> with TickerProviderStateMix
                 const SizedBox(height: 4),
                 Text(
                   email.contentText ?? '无内容',
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: AppTheme.textSecondaryColor,
                     fontSize: 14,
                   ),

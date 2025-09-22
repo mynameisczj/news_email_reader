@@ -40,31 +40,39 @@ class EmailRepository {
     DateTime? endDate,
   }) async {
     List<EmailMessage> emails = await _storage.getAllEmails();
-    
+
     // 应用筛选条件
     if (accountId != null) {
       emails = emails.where((email) => email.accountId == accountId).toList();
     }
-    
+
     if (isRead != null) {
       emails = emails.where((email) => email.isRead == isRead).toList();
     }
-    
+
     if (isStarred != null) {
       emails = emails.where((email) => email.isStarred == isStarred).toList();
     }
-    
+
     if (startDate != null) {
-      emails = emails.where((email) => email.receivedDate.isAfter(startDate) || email.receivedDate.isAtSameMomentAs(startDate)).toList();
+      emails = emails
+          .where((email) =>
+              email.receivedDate.isAfter(startDate) ||
+              email.receivedDate.isAtSameMomentAs(startDate))
+          .toList();
     }
-    
+
     if (endDate != null) {
-      emails = emails.where((email) => email.receivedDate.isBefore(endDate) || email.receivedDate.isAtSameMomentAs(endDate)).toList();
+      emails = emails
+          .where((email) =>
+              email.receivedDate.isBefore(endDate) ||
+              email.receivedDate.isAtSameMomentAs(endDate))
+          .toList();
     }
-    
+
     // 按接收时间降序排序
     emails.sort((a, b) => b.receivedDate.compareTo(a.receivedDate));
-    
+
     // 应用分页
     if (offset > 0) {
       emails = emails.skip(offset).toList();
@@ -72,69 +80,80 @@ class EmailRepository {
     if (limit != null && limit > 0 && emails.length > limit) {
       emails = emails.take(limit).toList();
     }
-    
+
     return emails;
   }
 
   /// 同步邮件（从服务器获取并筛选）
-  Future<List<EmailMessage>> syncEmails(EmailAccount account, {bool forceRefresh = false}) async {
+  Future<List<EmailMessage>> syncEmails(EmailAccount account,
+      {bool forceRefresh = false}) async {
     try {
       debugPrint('开始同步邮件...');
-      
+
       // 获取本地已有邮件，建立用户数据映射（收藏、笔记、已读状态等）
       final existingEmails = await _storage.getAllEmails();
       final userDataMap = <String, EmailMessage>{};
-      
+
       // 只保留有用户操作的邮件数据
       for (final email in existingEmails) {
-        if (email.isStarred || 
-            (email.notes != null && email.notes!.isNotEmpty) || 
+        if (email.isStarred ||
+            (email.notes != null && email.notes!.isNotEmpty) ||
             email.isRead ||
             (email.aiSummary != null && email.aiSummary!.isNotEmpty)) {
           userDataMap[email.messageId] = email;
         }
       }
-      
+
       debugPrint('保留 ${userDataMap.length} 封邮件的用户数据');
-      
+
       // 根据设置获取同步配置
       final syncQuantity = await _settingsService.getSyncQuantity();
       final syncTimeRange = await _settingsService.getSyncTimeRange();
-      
+
+      debugPrint('成功获取同步配置');
       // 从邮件服务器获取邮件（按账户协议与配置）
-      final fetchCount = syncQuantity == 0 ? 2000 : syncQuantity; // 0表示全部，设置一个较大的数值
-      final serverEmails = await _emailService.fetchRecentEmails(account, count: fetchCount);
+      final fetchCount =
+          syncQuantity == 0 ? 2000 : syncQuantity; // 0表示全部，设置一个较大的数值
+      final serverEmails =
+          await _emailService.fetchRecentEmails(account, count: fetchCount);
       debugPrint('从服务器获取到 ${serverEmails.length} 封邮件');
-      
+
       // 根据时间范围筛选邮件
       List<EmailMessage> timeFilteredEmails = serverEmails;
       if (syncTimeRange > 0) {
-        final cutoffDate = DateTime.now().subtract(Duration(days: syncTimeRange));
-        timeFilteredEmails = serverEmails.where((email) => 
-          email.receivedDate.isAfter(cutoffDate)
-        ).toList();
+        final cutoffDate =
+            DateTime.now().subtract(Duration(days: syncTimeRange));
+        timeFilteredEmails = serverEmails
+            .where((email) => email.receivedDate.isAfter(cutoffDate))
+            .toList();
         debugPrint('时间筛选后剩余 ${timeFilteredEmails.length} 封邮件');
       }
 
       // 先通过白名单筛选
-      final whitelistFilteredEmails = await _whitelistService.filterEmails(timeFilteredEmails);
+      final whitelistFilteredEmails =
+          await _whitelistService.filterEmails(timeFilteredEmails);
       debugPrint('白名单筛选后剩余 ${whitelistFilteredEmails.length} 封邮件');
 
       // 找出被白名单过滤掉但有用户操作的邮件
-      final filteredOutEmails = timeFilteredEmails.where((email) => 
-        !whitelistFilteredEmails.any((filtered) => filtered.messageId == email.messageId)
-      ).toList();
-      
+      final filteredOutEmails = timeFilteredEmails
+          .where((email) => !whitelistFilteredEmails
+              .any((filtered) => filtered.messageId == email.messageId))
+          .toList();
+
       final importantFilteredOutEmails = filteredOutEmails.where((email) {
         final userData = userDataMap[email.messageId];
-        return userData != null && (userData.isStarred || 
-               (userData.notes != null && userData.notes!.isNotEmpty));
+        return userData != null &&
+            (userData.isStarred ||
+                (userData.notes != null && userData.notes!.isNotEmpty));
       }).toList();
-      
+
       debugPrint('找到 ${importantFilteredOutEmails.length} 封被过滤但有用户操作的重要邮件');
 
       // 合并白名单通过的邮件和重要的被过滤邮件
-      final allValidEmails = [...whitelistFilteredEmails, ...importantFilteredOutEmails];
+      final allValidEmails = [
+        ...whitelistFilteredEmails,
+        ...importantFilteredOutEmails
+      ];
       debugPrint('最终处理 ${allValidEmails.length} 封邮件');
 
       // 合并服务器邮件和用户数据
@@ -156,11 +175,11 @@ class EmailRepository {
           finalEmails.add(serverEmail);
         }
       }
-      
+
       // 清空本地存储，重新保存所有邮件
       await _storage.clearEmailCache();
       await _storage.saveEmails(finalEmails);
-      
+
       debugPrint('同步完成，共保存 ${finalEmails.length} 封邮件');
       return finalEmails;
     } catch (e) {
@@ -183,13 +202,13 @@ class EmailRepository {
   }) async {
     final email = await _storage.getEmailById(emailId);
     if (email == null) return;
-    
+
     final updatedEmail = email.copyWith(
       isRead: isRead ?? email.isRead,
       isStarred: isStarred ?? email.isStarred,
       aiSummary: aiSummary ?? email.aiSummary,
     );
-    
+
     await _storage.updateEmail(updatedEmail);
   }
 
@@ -205,29 +224,29 @@ class EmailRepository {
     int? limit,
   }) async {
     List<EmailMessage> emails = await _storage.getAllEmails();
-    
+
     // 应用账户筛选
     if (accountId != null) {
       emails = emails.where((email) => email.accountId == accountId).toList();
     }
-    
+
     // 搜索匹配
     final lowerQuery = query.toLowerCase();
     emails = emails.where((email) {
       return email.subject.toLowerCase().contains(lowerQuery) ||
-             (email.senderName?.toLowerCase().contains(lowerQuery) ?? false) ||
-             email.senderEmail.toLowerCase().contains(lowerQuery) ||
-             (email.contentText?.toLowerCase().contains(lowerQuery) ?? false);
+          (email.senderName?.toLowerCase().contains(lowerQuery) ?? false) ||
+          email.senderEmail.toLowerCase().contains(lowerQuery) ||
+          (email.contentText?.toLowerCase().contains(lowerQuery) ?? false);
     }).toList();
-    
+
     // 按接收时间降序排序
     emails.sort((a, b) => b.receivedDate.compareTo(a.receivedDate));
-    
+
     // 应用限制
     if (limit != null && limit > 0 && emails.length > limit) {
       emails = emails.take(limit).toList();
     }
-    
+
     return emails;
   }
 
@@ -236,7 +255,7 @@ class EmailRepository {
     final today = DateTime.now();
     final startOfDay = DateTime(today.year, today.month, today.day);
     final endOfDay = startOfDay.add(const Duration(days: 1));
-    
+
     return await getLocalEmails(
       accountId: accountId,
       startDate: startOfDay,
@@ -248,8 +267,9 @@ class EmailRepository {
   Future<List<EmailMessage>> getWeekEmails({int? accountId}) async {
     final now = DateTime.now();
     final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
-    final startOfWeekDay = DateTime(startOfWeek.year, startOfWeek.month, startOfWeek.day);
-    
+    final startOfWeekDay =
+        DateTime(startOfWeek.year, startOfWeek.month, startOfWeek.day);
+
     return await getLocalEmails(
       accountId: accountId,
       startDate: startOfWeekDay,
@@ -259,20 +279,21 @@ class EmailRepository {
   /// 获取已总结的邮件
   Future<List<EmailMessage>> getSummarizedEmails({int? accountId}) async {
     List<EmailMessage> emails = await _storage.getAllEmails();
-    
+
     // 筛选有AI总结的邮件
-    emails = emails.where((email) => 
-      email.aiSummary != null && email.aiSummary!.isNotEmpty
-    ).toList();
-    
+    emails = emails
+        .where(
+            (email) => email.aiSummary != null && email.aiSummary!.isNotEmpty)
+        .toList();
+
     // 应用账户筛选
     if (accountId != null) {
       emails = emails.where((email) => email.accountId == accountId).toList();
     }
-    
+
     // 按接收时间降序排序
     emails.sort((a, b) => b.receivedDate.compareTo(a.receivedDate));
-    
+
     return emails;
   }
 
@@ -285,7 +306,7 @@ class EmailRepository {
   Future<int> cleanupOldEmails() async {
     final emails = await _storage.getAllEmails();
     final thirtyDaysAgo = DateTime.now().subtract(const Duration(days: 30));
-    
+
     int deletedCount = 0;
     for (final email in emails) {
       if (email.receivedDate.isBefore(thirtyDaysAgo) && !email.isStarred) {
@@ -293,7 +314,7 @@ class EmailRepository {
         deletedCount++;
       }
     }
-    
+
     return deletedCount;
   }
 

@@ -150,7 +150,7 @@ class _WhitelistManagementSectionState extends ConsumerState<WhitelistManagement
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
+          const Icon(
             Icons.filter_list_off,
             size: 64,
             color: AppTheme.textSecondaryColor,
@@ -206,7 +206,7 @@ class _WhitelistManagementSectionState extends ConsumerState<WhitelistManagement
             Switch(
               value: rule.isActive,
               onChanged: (value) => _toggleRuleStatus(rule, value),
-              activeColor: AppTheme.primaryColor,
+              activeThumbColor: AppTheme.primaryColor,
             ),
             PopupMenuButton<String>(
               onSelected: (value) => _handleRuleAction(value, rule),

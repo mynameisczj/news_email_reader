@@ -341,11 +341,11 @@ class AnimatedCounter extends StatelessWidget {
   final TextStyle? textStyle;
 
   const AnimatedCounter({
-    Key? key,
+    super.key,
     required this.value,
     this.duration = const Duration(milliseconds: 500),
     this.textStyle,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -368,10 +368,10 @@ class LoadingAnimation extends StatefulWidget {
   final Color? color;
 
   const LoadingAnimation({
-    Key? key,
+    super.key,
     this.size = 24.0,
     this.color,
-  }) : super(key: key);
+  });
 
   @override
   State<LoadingAnimation> createState() => _LoadingAnimationState();

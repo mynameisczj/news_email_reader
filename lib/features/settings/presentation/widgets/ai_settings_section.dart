@@ -261,7 +261,7 @@ class _AISettingsSectionState extends ConsumerState<AISettingsSection> {
               _autoSummary = value;
             });
           },
-          activeColor: AppTheme.primaryColor,
+          activeThumbColor: AppTheme.primaryColor,
         ),
         SwitchListTile(
           title: const Text('批量总结'),
@@ -273,7 +273,7 @@ class _AISettingsSectionState extends ConsumerState<AISettingsSection> {
               _batchSummary = value;
             });
           },
-          activeColor: AppTheme.primaryColor,
+          activeThumbColor: AppTheme.primaryColor,
         ),
         ListTile(
           title: const Text('总结长度'),
@@ -301,7 +301,7 @@ class _AISettingsSectionState extends ConsumerState<AISettingsSection> {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: DropdownButtonFormField<TranslationProvider>(
-            value: _selectedTranslationProvider,
+            initialValue: _selectedTranslationProvider,
             decoration: const InputDecoration(
               labelText: '翻译服务提供商',
               border: OutlineInputBorder(),

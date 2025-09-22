@@ -17,7 +17,7 @@ enum TranslationProvider {
 
 class TranslationService {
   // 当未配置腾讯云密钥时，使用LibreTranslate公共实例
-  String _libreBaseUrl = 'https://libretranslate.de';
+  final String _libreBaseUrl = 'https://libretranslate.de';
   String? _libreApiKey;
 
   // 当前使用的翻译服务提供商

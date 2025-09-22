@@ -66,7 +66,7 @@ class _AccountManagementSectionState extends ConsumerState<AccountManagementSect
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
+            const Icon(
               Icons.email_outlined,
               size: 64,
               color: AppTheme.textSecondaryColor,
@@ -163,10 +163,10 @@ class _AccountManagementSectionState extends ConsumerState<AccountManagementSect
         trailing: PopupMenuButton<String>(
           onSelected: (value) => _handleAccountAction(value, account),
           itemBuilder: (context) => [
-            PopupMenuItem(
+            const PopupMenuItem(
               value: 'edit',
               child: Row(
-                children: const [
+                children: [
                   Icon(Icons.edit),
                   SizedBox(width: 8),
                   Text('编辑'),
@@ -183,20 +183,20 @@ class _AccountManagementSectionState extends ConsumerState<AccountManagementSect
                 ],
               ),
             ),
-            PopupMenuItem(
+            const PopupMenuItem(
               value: 'test',
               child: Row(
-                children: const [
+                children: [
                   Icon(Icons.wifi_tethering),
                   SizedBox(width: 8),
                   Text('测试连接'),
                 ],
               ),
             ),
-            PopupMenuItem(
+            const PopupMenuItem(
               value: 'delete',
               child: Row(
-                children: const [
+                children: [
                   Icon(Icons.delete, color: Colors.red),
                   SizedBox(width: 8),
                   Text('删除', style: TextStyle(color: Colors.red)),
@@ -286,7 +286,7 @@ class _AccountManagementSectionState extends ConsumerState<AccountManagementSect
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  value: selectedProtocol,
+                  initialValue: selectedProtocol,
                   decoration: const InputDecoration(
                     labelText: '协议类型',
                   ),

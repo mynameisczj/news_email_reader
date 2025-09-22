@@ -15,7 +15,7 @@ class SwipeableEmailCard extends StatefulWidget {
   final Color? rightActionColor;
 
   const SwipeableEmailCard({
-    Key? key,
+    super.key,
     required this.child,
     this.onSwipeLeft,
     this.onSwipeRight,
@@ -27,7 +27,7 @@ class SwipeableEmailCard extends StatefulWidget {
     this.rightActionIcon,
     this.leftActionColor,
     this.rightActionColor,
-  }) : super(key: key);
+  });
 
   @override
   State<SwipeableEmailCard> createState() => _SwipeableEmailCardState();
@@ -224,12 +224,12 @@ class CustomRefreshIndicator extends StatelessWidget {
   final Color? backgroundColor;
 
   const CustomRefreshIndicator({
-    Key? key,
+    super.key,
     required this.child,
     required this.onRefresh,
     this.color,
     this.backgroundColor,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -252,12 +252,12 @@ class ExpandableContent extends StatefulWidget {
   final Duration animationDuration;
 
   const ExpandableContent({
-    Key? key,
+    super.key,
     required this.header,
     required this.content,
     this.initiallyExpanded = false,
     this.animationDuration = const Duration(milliseconds: 300),
-  }) : super(key: key);
+  });
 
   @override
   State<ExpandableContent> createState() => _ExpandableContentState();
@@ -359,13 +359,13 @@ class FloatingActionButtonGroup extends StatefulWidget {
   final Color? foregroundColor;
 
   const FloatingActionButtonGroup({
-    Key? key,
+    super.key,
     required this.buttons,
     this.mainIcon = Icons.add,
     this.onMainPressed,
     this.backgroundColor,
     this.foregroundColor,
-  }) : super(key: key);
+  });
 
   @override
   State<FloatingActionButtonGroup> createState() => _FloatingActionButtonGroupState();

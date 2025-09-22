@@ -17,7 +17,7 @@ class WhitelistService {
 
   Future<List<WhitelistRule>> _loadRules() async {
     final jsonStr = await _storage.getString(_rulesKey);
-    if (jsonStr == null || jsonStr.isEmpty || jsonStr == '[]') {
+    if (jsonStr.isEmpty || jsonStr == '[]') {
       return _loadDefaultRules();
     }
     final List list = json.decode(jsonStr);

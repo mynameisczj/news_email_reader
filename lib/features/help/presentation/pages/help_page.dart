@@ -144,7 +144,7 @@ class _HelpPageState extends State<HelpPage> with SingleTickerProviderStateMixin
                 const SizedBox(height: 4),
                 Text(
                   'A: ${faq['answer']}',
-                  style: TextStyle(color: AppTheme.textSecondaryColor),
+                  style: const TextStyle(color: AppTheme.textSecondaryColor),
                 ),
                 const Divider(height: 20),
               ],

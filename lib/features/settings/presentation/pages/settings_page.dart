@@ -147,7 +147,7 @@ class _AppSettingsSectionState extends ConsumerState<AppSettingsSection> {
                         value ? ThemeMode.dark : ThemeMode.light,
                       );
                     },
-                    activeColor: AppTheme.primaryColor,
+                    activeThumbColor: AppTheme.primaryColor,
                   ),
                 );
               },
@@ -164,7 +164,7 @@ class _AppSettingsSectionState extends ConsumerState<AppSettingsSection> {
                     _notifications = value;
                   });
                 },
-                activeColor: AppTheme.primaryColor,
+                activeThumbColor: AppTheme.primaryColor,
               ),
             ),
 

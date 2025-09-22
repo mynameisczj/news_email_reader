@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_member_use
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -83,7 +85,7 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
   }
 
   Widget _buildEmptyState() {
-    return Center(
+    return const Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -92,7 +94,7 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
             size: 64,
             color: AppTheme.textSecondaryColor,
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           Text(
             '暂无收藏邮件',
             style: TextStyle(
@@ -100,7 +102,7 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
               color: AppTheme.textSecondaryColor,
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           Text(
             '点击邮件右上角的星标来收藏邮件',
             style: TextStyle(
@@ -174,7 +176,7 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
               const SizedBox(height: 8),
               Text(
                 email.displaySender,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 14,
                   color: AppTheme.textSecondaryColor,
                 ),
@@ -192,7 +194,7 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
                 children: [
                   Text(
                     _formatDate(email.receivedDate),
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 12,
                       color: AppTheme.textSecondaryColor,
                     ),
@@ -204,7 +206,7 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
                         color: AppTheme.primaryColor.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Text(
+                      child: const Text(
                         'AI总结',
                         style: TextStyle(
                           fontSize: 10,
